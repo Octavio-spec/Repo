@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Поиск (Т) — таблица результатов</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; max-width: 1400px; margin: 0 auto; background: #f7f7f9; }
+    h2 { margin: 0 0 .75em 0; }
+    .container { display: grid; grid-template-columns: 350px 1fr; grid-template-areas: "form results"; gap: 20px; align-items: start; }
+    #formCol     { grid-area: form; }
+    #resultsCard { grid-area: results; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; min-height: 120px; overflow-x: auto; }
+
+    #loading { color: #666; margin-bottom: 10px; }
+    #filterForm { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; display: grid; grid-template-columns: 1fr; gap: .5em 0; }
+    #filterForm input[type="number"], #filterForm select, #filterForm button { width: 100%; padding: .5em .6em; font-size: 1em; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; }
+    #filterForm button { background: #2563eb; color: #fff; border-color: #2563eb; cursor: pointer; }
+    #filterForm button:hover { background: #1d4ed8; border-color: #1d4ed8; }
+    input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type="number"] { -moz-appearance: textfield; }
+    .checkbox-group { margin: .3em 0; }
+    .checkbox-group label { display: flex; align-items: flex-start; gap: .4em; justify-self: start; font-size: .95em; }
+    .checkbox-group input[type="checkbox"] { width: auto; margin-top: .15em; }
+
+    #resultsTitle { margin: 0 0 8px 0; font-size: 1.05em; color: #374151; font-weight: 600; }
+    .table-wrap { width: 100%; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    thead th { position: sticky; top: 0; background: #f3f4f6; color: #374151; text-align: left; font-weight: 600; border-bottom: 1px solid #e5e7eb; padding: 8px 10px; white-space: nowrap; }
+    tbody td { border-bottom: 1px solid #f1f5f9; padding: 8px 10px; vertical-align: middle; white-space: nowrap; }
+    tbody tr:hover { background: rgba(37,99,235,0.15); }
+    .td-name { font-weight: 600; color: #111827; }
+    .td-flag { text-align: center; width: 80px; }
+    .muted { color: #6b7280; }
+    .empty { color: #6b7280; font-size: .95em; padding: .3em 0; }
+    pre#error { white-space: pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top: 10px; color:#9b1c1c; }
+
+    @media (max-width: 860px) {
+      .container { grid-template-columns: 1fr; grid-template-areas: "form" "results"; }
+      thead th, tbody td { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <h2>Поиск (Т)</h2>
+
+  <div class="container">
+    <div id="formCol">
+      <div id="loading">Загрузка данных…</div>
+      <form id="filterForm">
+        <select id="C3"><option value="">— Все типы станков —</option></select>
+        <input type="number" id="C4" placeholder="Макс. диаметр точения" />
+        <input type="number" id="C5" placeholder="Макс. длина точения" />
+        <input type="number" id="C6" placeholder="Макс. скорость шпинделя" />
+        <input type="number" id="C7" placeholder="Диаметр патрона" />
+        <div class="checkbox-group"><label><input type="checkbox" id="C8" /> Ось Y</label></div>
+        <div class="checkbox-group"><label><input type="checkbox" id="C9" /> Противошпиндель</label></div>
+        <div class="checkbox-group"><label><input type="checkbox" id="C10" /> Приводной инструмент</label></div>
+        <button type="button" id="searchBtn">Найти</button>
+        <pre id="error"></pre>
+      </form>
+    </div>
+
+    <div id="resultsCard">
+      <div id="resultsTitle">Результаты</div>
+      <div id="results" class="table-wrap"></div>
+    </div>
+  </div>
+
+  <script>
+    /* ===== ПАРАМЕТРЫ ===== */
+    const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
+    const GID = "1008569495";
+    const CSV_URL = `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(GID)}`;
+
+    async function loadViaCSV() {
+      const url = CSV_URL + `&_=${Date.now()}`; // анти-кэш
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`CSV HTTP ${r.status}`);
+      const matrix = parseCSV(await r.text());
+      const { res, map } = matrixToRecords(matrix);
+      dataStore = res; headerMap = map;
+    }
+
+    /* ===== ДАННЫЕ ===== */
+    let dataStore = [];   // записи (по столбцам)
+    let headerMap = {};   // индекс по header
+
+    /* ===== УТИЛИТЫ ===== */
+    const check = "✓", cross = "—";
+    const fmt = v => (v === -1 ? "—" : v);
+
+    function toNumberStrict(v) {
+      if (v == null) return null;
+      const s = String(v).trim().replace(',', '.');
+      if (!/^[+-]?\d+(\.\d+)?$/.test(s)) return null;
+      return parseFloat(s);
+    }
+    function num(v) { const n = toNumberStrict(v); return n === null ? -1 : n; }
+    function boolStrict(v) {
+      if (v == null) return false;
+      const n = toNumberStrict(v); if (n !== null) return n > 0;      // число > 0
+      const s = String(v).trim().toLowerCase();
+      return ["да","yes","true","есть","y","1"].includes(s);          // текст ИСТИНА
+    }
+    const safeCell = (m, r, c) => (m[r] && m[r][c] !== undefined) ? m[r][c] : "";
+    const showErr  = msg => { const b = document.getElementById("error"); b.textContent = msg; b.style.display = "block"; };
+
+    /* Надёжный CSV-парсер (поддерживает кавычки и запятые внутри ячеек) */
+    function parseCSV(text) {
+      const rows = [];
+      let row = [], cur = '', inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i], next = text[i+1];
+        if (inQuotes) {
+          if (ch === '"' && next === '"') { cur += '"'; i++; }
+          else if (ch === '"') { inQuotes = false; }
+          else { cur += ch; }
+        } else {
+          if (ch === '"') inQuotes = true;
+          else if (ch === ',') { row.push(cur); cur = ''; }
+          else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+          else if (ch === '\r') { /* skip */ }
+          else { cur += ch; }
+        }
+      }
+      if (cur.length || row.length) { row.push(cur); rows.push(row); }
+      return rows.filter(r => r.length && !(r.length===1 && r[0]===''));
+    }
+
+    /* ===== Матрица -> записи (жёсткие индексы, НИКАКИХ сдвигов) ===== */
+    function matrixToRecords(m) {
+      const res = [], map = {};
+      if (!m.length) return { res, map };
+
+      // твои строки (1-based) переведены в индексы (0-based):
+      const R = { v9: 8, v10: 9, v34: 33, v35: 35, f15: 14, f17: 16, toolSpeedRow: 55 };
+
+      const cols = m[0].length;
+      for (let j = 3; j < cols; j++) { // начиная с D
+        const h = String(safeCell(m, 0, j)).toLowerCase().trim();
+        if (!h) continue;
+
+        // имя модели — строка 3; если пусто, берём заголовок из строки 1
+        let name = String(safeCell(m, 2, j)).trim();
+        if (!name || name.startsWith("#")) name = String(safeCell(m, 0, j)).trim();
+
+        const item = {
+          header: h,
+          name,
+          v9:  num(safeCell(m, R.v9,  j)),  // Ø точения
+          v10: num(safeCell(m, R.v10, j)),  // длина
+          v34: num(safeCell(m, R.v34, j)),  // скорость шпинделя
+          v35: num(safeCell(m, R.v35, j)),  // патрон
+          f15: boolStrict(safeCell(m, R.f15, j)),                 // ось Y
+          f17: boolStrict(safeCell(m, R.f17, j)),                 // противошпиндель
+          f56: (num(safeCell(m, R.toolSpeedRow, j)) > 0)          // приводной инструмент
+        };
+
+        res.push(item);
+        (map[h] = map[h] || []).push(item);
+      }
+      return { res, map };
+    }
+
+    function fillSelect() {
+      const sel = document.getElementById("C3");
+      sel.innerHTML = '<option value="">— Все типы станков —</option>';
+      Object.keys(headerMap).sort().forEach(key => {
+        const opt = document.createElement("option");
+        opt.value = key; opt.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+        sel.appendChild(opt);
+      });
+    }
+
+    function renderTable(items) {
+      if (!items.length) return '<div class="empty">Ничего не найдено</div>';
+      let html = `
+        <table>
+          <thead>
+            <tr>
+              <th>Модель</th>
+              <th title="Макс. диаметр точения">Ø Точения</th>
+              <th title="Макс. длина точения">Длина</th>
+              <th title="Макс. скорость шпинделя">Скорость шпинделя</th>
+              <th title="Диаметр патрона">Патрон</th>
+              <th class="td-flag">Ось Y</th>
+              <th class="td-flag">Противошп.</th>
+              <th class="td-flag">Привод.инстр.</th>
+            </tr>
+          </thead>
+          <tbody>`;
+      for (const m of items) {
+        html += `
+          <tr>
+            <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
+            <td>${fmt(m.v9)}</td>
+            <td>${fmt(m.v10)}</td>
+            <td>${fmt(m.v34)}</td>
+            <td>${fmt(m.v35)}</td>
+            <td class="td-flag">${m.f15 ? check : cross}</td>
+            <td class="td-flag">${m.f17 ? check : cross}</td>
+            <td class="td-flag">${m.f56 ? check : cross}</td>
+          </tr>`;
+      }
+      html += `</tbody></table>`;
+      return html;
+    }
+
+    function doSearch() {
+      const C3  = document.getElementById("C3").value;
+      const C4  = +document.getElementById("C4").value || 0;
+      const C5  = +document.getElementById("C5").value || 0;
+      const C6  = +document.getElementById("C6").value || 0;
+      const C7  = +document.getElementById("C7").value || 0;
+      const C8  = document.getElementById("C8").checked;
+      const C9  = document.getElementById("C9").checked;
+      const C10 = document.getElementById("C10").checked;
+
+      if (!dataStore.length) { alert("Данные ещё загружаются…"); return; }
+
+      const cand = (C3 && headerMap[C3]) ? headerMap[C3] : dataStore;
+      const matches = [];
+
+      for (const item of cand) {
+        if (!item.name) continue;
+
+        if (C4 && item.v9  !== -1 && (C4 > item.v9  || (C4 + 100)      < item.v9)) continue;
+        if (C5 && item.v10 !== -1 && (C5 > item.v10 || (C5 + C5 * 1.5) < item.v10)) continue;
+        if (C6 && item.v34 !== -1 && (C6 > item.v34)) continue;
+        if (C7 && item.v35 !== -1 && (C7 > item.v35)) continue;
+
+        if (C8  && !item.f15) continue;  // ось Y
+        if (C9  && !item.f17) continue;  // противошпиндель
+        if (C10 && !item.f56) continue;  // приводной инструмент
+
+        matches.push(item);
+      }
+
+      document.getElementById("results").innerHTML = renderTable(matches);
+    }
+
+    function loadData() {
+      const loading = document.getElementById("loading");
+      loading.style.display = "block";
+      loadViaCSV()
+        .then(fillSelect)
+        .catch(err => showErr("Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + err.message))
+        .finally(() => { loading.style.display = "none"; });
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      loadData();
+      document.getElementById("searchBtn").addEventListener("click", doSearch);
+    });
+  </script>
+</body>
+</html>

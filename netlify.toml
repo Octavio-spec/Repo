@@ -1,0 +1,7 @@
+[functions]
+  directory = "netlify/functions"
+
+[[redirects]]
+  from = "/api/sheet"
+  to = "/.netlify/functions/sheet"
+  status = 200

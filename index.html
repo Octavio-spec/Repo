@@ -144,8 +144,8 @@
         let name = String(safeCell(m, 2, j)).trim();
         if (!name || name.startsWith("#")) name = String(safeCell(m, 0, j)).trim();
 
-        // производитель: например, строка 2 (индекс 2)
-        let brand = String(safeCell(m, 2, j)).trim();
+        // производитель: например, строка 1 (индекс 1)
+        let brand = String(safeCell(m, 1, j)).trim();
 
         const item = {
           header: h,

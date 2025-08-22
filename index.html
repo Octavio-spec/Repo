@@ -132,6 +132,13 @@
       const res = [], map = {};
       if (!m.length) return { res, map };
 
+      // имя модели
+      let name = String(safeCell(m, 2, j)).trim();
+      if (!name || name.startsWith("#")) name = String(safeCell(m, 0, j)).trim();
+
+      // производитель: например, строка 1 (индекс 1)
+      let brand = String(safeCell(m, 1, j)).trim();
+
       // твои строки (1-based) переведены в индексы (0-based):
       const R = { v9: 8, v10: 9, v34: 33, v35: 35, f15: 14, f17: 16, toolSpeedRow: 55 };
 
@@ -147,6 +154,7 @@
         const item = {
           header: h,
           name,
+          brand,
           v9:  num(safeCell(m, R.v9,  j)),  // Ø точения
           v10: num(safeCell(m, R.v10, j)),  // длина
           v34: num(safeCell(m, R.v34, j)),  // скорость шпинделя
@@ -178,6 +186,7 @@
         <table>
           <thead>
             <tr>
+              <th>Производитель</th>
               <th>Модель</th>
               <th title="Макс. диаметр точения">Ø Точения</th>
               <th title="Макс. длина точения">Длина</th>
@@ -192,6 +201,7 @@
       for (const m of items) {
         html += `
           <tr>
+            <td>${m.brand || "<span class='muted'>—</span>"}</td>
             <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
             <td>${fmt(m.v9)}</td>
             <td>${fmt(m.v10)}</td>

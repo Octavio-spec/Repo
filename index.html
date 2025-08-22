@@ -132,13 +132,6 @@
       const res = [], map = {};
       if (!m.length) return { res, map };
 
-      // имя модели
-      let name = String(safeCell(m, 2, j)).trim();
-      if (!name || name.startsWith("#")) name = String(safeCell(m, 0, j)).trim();
-
-      // производитель: например, строка 1 (индекс 1)
-      let brand = String(safeCell(m, 1, j)).trim();
-
       // твои строки (1-based) переведены в индексы (0-based):
       const R = { v9: 8, v10: 9, v34: 33, v35: 35, f15: 14, f17: 16, toolSpeedRow: 55 };
 
@@ -150,6 +143,9 @@
         // имя модели — строка 3; если пусто, берём заголовок из строки 1
         let name = String(safeCell(m, 2, j)).trim();
         if (!name || name.startsWith("#")) name = String(safeCell(m, 0, j)).trim();
+
+        // производитель: например, строка 2 (индекс 2)
+        let brand = String(safeCell(m, 2, j)).trim();
 
         const item = {
           header: h,

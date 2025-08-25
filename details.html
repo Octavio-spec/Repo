@@ -119,8 +119,9 @@ async function main(){
   // найти последнюю строку, где в этом столбце есть подпись (A/B) или значение
   let last = matrix.length - 1;
   while (last >= 0) {
-    const labelHere = clean(rowText(matrix, last));
-    const valHere   = clean(matrix[last]?.[col]);
+    const labelHere = clean(rowText(matrix, last)); // колонка А - параметр
+     const unit    = clean(matrix[r]?.[1]);  // колонка B — единица измерения
+    const valHere   = clean(matrix[last]?.[col]); // сами данные
     if (labelHere !== "" || hasValue(valHere)) break;  // учитываем «смысловую» пустоту
     last--;
   }
@@ -139,10 +140,40 @@ async function main(){
 
   // --- рендер ---
   const kv = document.getElementById("kv");
-  let html = "";
+  let html = `
+    <thead>
+      <tr>
+        <th>Параметр</th>
+        <th>Значение</th>
+        <th>Ед. изм.</th>
+      </tr>
+    </thead>
+    <tbody>
+  `;
   for (const row of rows) {
-    html += '<tr><th>' + esc(row.label) + '</th><td>' + esc(row.value) + '</td></tr>';
+    html += `
+      <tr>
+        <th>${esc(row.label)}</th>
+        <td><strong>${esc(row.value)}</strong></td>
+        <td>${esc(row.unit)}</td>
+      </tr>
+    `;
   }
+  html += "</tbody>";
+  if (rows.length === 0) {
+  html = `
+    <thead>
+      <tr>
+        <th>Параметр</th>
+        <th>Значение</th>
+        <th>Ед. изм.</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="3" class="muted">Нет данных</td></tr>
+    </tbody>`;
+  }
+  document.getElementById("kv").innerHTML = html;
   if (html === "") {
     html = '<tr><td colspan="2" class="muted">Нет данных</td></tr>';
   }

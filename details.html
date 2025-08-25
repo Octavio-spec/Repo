@@ -36,11 +36,12 @@ const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
 const GIDS = { lathe: "1008569495", milling: "361418967" };
 const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}&_=${Date.now()}`;
 
-function clean(s){ return String(s ?? "").replace(/\u00A0/g, " ").trim(); } // убираем неразрывные пробелы
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function clean(s){ return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
 function hasValue(v){
   const s = clean(v);
-  if (s === "") return false;
-  if (/^[-–—]+$/.test(s)) return false;       // только тире
+  if (!s) return false;
+  if (/^[-–—]+$/.test(s)) return false;      // только тире
   if (/^(нет|n\/?a|na)$/i.test(s)) return false;
   return true;
 }
@@ -81,6 +82,33 @@ function rowText(m,r){
   return a || b; // подпись берём из колонки A или B
 }
 
+function buildRows(matrix, col){
+  const rows = [];
+
+  // найти последнюю «содержательную» строку
+  let last = matrix.length - 1;
+  while (last >= 0) {
+    const a = clean(matrix[last]?.[0]);   // колонка A — параметр
+    const b = clean(matrix[last]?.[1]);   // колонка B — ед. изм.
+    const v = clean(matrix[last]?.[col]); // значение
+    if (a || b || hasValue(v)) break;
+    last--;
+  }
+
+  // собрать строки Параметр|Значение|Ед.изм.
+  for (let i = 0; i <= last; i++) {
+    const label = clean(matrix[i]?.[0]);   // A
+    const unit  = clean(matrix[i]?.[1]);   // B
+    const value = clean(matrix[i]?.[col]); // значение
+
+    if (!hasValue(value)) continue;        // пропустить пустые/«—»/«нет»
+    if (/титуль/i.test(label)) continue;   // служебные строки
+
+    rows.push({ label, value, unit });
+  }
+  return rows;
+}
+
 /* ===== Загрузка и отрисовка ===== */
 async function main(){
   if(!id){ fail("Не передан параметр id."); return; }
@@ -113,7 +141,7 @@ async function main(){
   document.getElementById("meta").textContent  = tab === "milling" ? "Фрезерные" : "Токарные";
 
   // --- построение списка пар "подпись → значение" с пропуском пустых строк ---
-  const rows = [];
+  const rows = buildRows(matrix, col);
   const start = 0; // или 1, если хочешь пропустить самую верхнюю строку
 
   // найти последнюю строку, где в этом столбце есть подпись (A/B) или значение
@@ -123,7 +151,7 @@ async function main(){
      const unit    = clean(matrix[r]?.[1]);  // колонка B — единица измерения
     const valHere   = clean(matrix[last]?.[col]); // сами данные
     if (labelHere !== "" || hasValue(valHere)) break;  // учитываем «смысловую» пустоту
-    last--;
+    lasst--;
   }
 
   for (let r = start; r <= last; r++) {

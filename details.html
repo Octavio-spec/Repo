@@ -107,8 +107,8 @@ async function main(){
   let last = matrix.length - 1;
   while(last >= 0){
     const label = rowText(matrix, last);
-    const val   = String(matrix[last]?.[col] ?? "").trim();
-    if(hasContent(label) || hasContent(val)) break;
+    const val   = (matrix[last] && matrix[last][col]) ? String(matrix[last]?.[col] ?? "").trim() : "";
+    if(lbl.trim() !== ""|| val !== "") break;
     last--;
   }
 
@@ -118,25 +118,27 @@ async function main(){
   for(let r = start; r <= last; r++){
     const label = rowText(matrix, r).trim();
     const raw   = matrix[r]?.[col];
-    const value = raw == null ? "" : String(raw).trim();
+    const value = (matrix[r] && matrix[r][col]) ? String(matrix[r][col]).trim() : "";
 
     // пропускаем полностью пустые строки
-    if(!label && !value) continue;
+    if (label === "" && value === "") continue;
 
     // пропускаем служебные (например "Титульный лист")
-    if(/титуль/i.test(label.toLowerCase())) continue;
+    if (/титуль/i.test(label)) continue;
 
     rows.push({ label, value });
   }
 
   // рендер таблицы
   const kv = document.getElementById("kv");
-  kv.innerHTML = rows.length ? rows.map(({label,value}) => `
-    <tr>
-      <th>${esc(label)}</th>
-      <td>${esc(value)}</td>
-    </tr>
-  `).join("") || `<tr><td colspan="2" class="muted">Нет данных</td></tr>`;
+    let html = "";
+    for (const row of rows) {
+        html += '<tr><th>' + esc(row.label) + '</th><td>' + esc(row.value) + '</td></tr>';
+    }
+    if (html === "") {
+        html = '<tr><td colspan="2" class="muted">Нет данных</td></tr>';
+    }
+    kv.innerHTML = html;
 }
 
 function fail(msg){

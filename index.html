@@ -265,97 +265,99 @@ function openDetails(id) {
 }
 
 function setupRowClickDelegation(){
-  const wrap = document.getElementById("results");
-  wrap.addEventListener("click", (e) => {
+  document.getElementById("results").addEventListener("click", (e) => {
     const tr = e.target.closest("tr.res-row");
     if (!tr) return;
     const id = tr.dataset.id;
-    openDetails(id);
+    // пока можно просто открыть details.html или показать alert
+    // window.open(`details.html?id=${id}`, "_blank");
+    console.log("row click:", id);
   });
 }
 
+function esc(s){ return String(s??"").replace(/[&<>"']/g, m=>({
+  "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+}[m])); }
+
 /* Рендер таблиц */
 function renderTableLathe(items){
-  if(!items.length) return '<div class="empty">Ничего не найдено</div>';
-  let html=`
-  <table>
-    <thead>
-      <tr onclick = "openDetails('${encodeURIComponent(m.header)}')">
-        <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
-        <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
-        <th>Производитель</th>
-        <th>Модель</th>
-        <th title="Макс. диаметр точения">Ø Точения</th>
-        <th title="Макс. длина точения">Длина</th>
-        <th title="Макс. скорость шпинделя">Скорость шпинделя</th>
-        <th title="Диаметр патрона">Патрон</th>
-        <th class="td-flag">Ось Y</th>
-        <th class="td-flag">Противошп.</th>
-        <th class="td-flag">Привод.инстр.</th>
-      </tr>
-    </thead>
-    <tbody>`;
-  for(const m of items){
-    html += `
-      <tr class="res-row" data-id="${encodeURIComponent(m.header)}">
-        <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
-        <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
-        <td>${fmt(m.v9)}</td>
-        <td>${fmt(m.v10)}</td>
-        <td>${fmt(m.v34)}</td>
-        <td>${fmt(m.v35)}</td>
-        <td class="td-flag">${m.f15 ? check : cross}</td>
-        <td class="td-flag">${m.f17 ? check : cross}</td>
-        <td class="td-flag">${m.f56 ? check : cross}</td>
-      </tr>`;
-  }
-  html += `</tbody></table>`;
-  return html;
+  if(!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
+
+  const rows = items.map(it => `
+    <tr class="res-row" data-id="${encodeURIComponent(it.header)}">
+      <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
+      <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+      <td>${fmt(it.v9)}</td>
+      <td>${fmt(it.v10)}</td>
+      <td>${fmt(it.v34)}</td>
+      <td>${fmt(it.v35)}</td>
+      <td class="td-flag">${it.f15 ? check : cross}</td>
+      <td class="td-flag">${it.f17 ? check : cross}</td>
+      <td class="td-flag">${it.f56 ? check : cross}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Производитель</th>
+          <th>Модель</th>
+          <th title="Макс. диаметр точения">Ø Точения</th>
+          <th title="Макс. длина точения">Длина</th>
+          <th title="Макс. скорость шпинделя">Скорость шпинделя</th>
+          <th title="Диаметр патрона">Патрон</th>
+          <th class="td-flag">Ось Y</th>
+          <th class="td-flag">Противошп.</th>
+          <th class="td-flag">Привод.инстр.</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
+
 function renderTableMilling(items){
-  if(!items.length) return '<div class="empty">Ничего не найдено</div>';
-  let html=`
-  <table>
-    <thead>
-      <tr onclick = "openDetails('${encodeURIComponent(m.header)}')">
-        <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
-        <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
-        <th>Производитель</th>
-        <th>Модель</th>
-        <th>Тип</th>
-        <th>Длина стола</th>
-        <th>Ширина стола</th>
-        <th>Скорость шпинделя</th>
-        <th>Мощн. пост.</th>
-        <th>Мощн. макс.</th>
-        <th>Ход X</th>
-        <th>Ход Y</th>
-        <th>Ход Z</th>
-        <th>Конус</th>
-        <th class="td-flag">Ось W</th>
-      </tr>
-    </thead>
-    <tbody>`;
-  for(const m of items){
-    html += `
-      <tr class="res-row" data-id="${encodeURIComponent(m.header)}">
-        <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
-        <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
-        <td>${fmt(m.type)}</td>
-        <td>${fmt(m.len)}</td>
-        <td>${fmt(m.width)}</td>
-        <td>${fmt(m.spindleSpeed)}</td>
-        <td>${fmt(m.powerConst)}</td>
-        <td>${fmt(m.powerMax)}</td>
-        <td>${fmt(m.axisX)}</td>
-        <td>${fmt(m.axisY)}</td>
-        <td>${fmt(m.axisZ)}</td>
-        <td>${fmt(m.taper)}</td>
-        <td>${fmt(m.axisW)}</td>
-      </tr>`;
-  }
-  html += `</tbody></table>`;
-  return html;
+  if(!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
+
+  const rows = items.map(it => `
+    <tr class="res-row" data-id="${encodeURIComponent(it.header)}">
+      <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
+      <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+      <td>${fmt(it.type)}</td>
+      <td>${fmt(it.len)}</td>
+      <td>${fmt(it.width)}</td>
+      <td>${fmt(it.spindleSpeed)}</td>
+      <td>${fmt(it.powerConst)}</td>
+      <td>${fmt(it.powerMax)}</td>
+      <td>${fmt(it.axisX)}</td>
+      <td>${fmt(it.axisY)}</td>
+      <td>${fmt(it.axisZ)}</td>
+      <td>${fmt(it.taper)}</td>
+      <td>${fmt(it.axisW)}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Производитель</th>
+          <th>Модель</th>
+          <th>Тип</th>
+          <th>Длина стола</th>
+          <th>Ширина стола</th>
+          <th>Скорость шпинделя</th>
+          <th>Мощн. пост.</th>
+          <th>Мощн. макс.</th>
+          <th>Ход X</th>
+          <th>Ход Y</th>
+          <th>Ход Z</th>
+          <th>Конус</th>
+          <th>Ось W</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 /* ===== Загрузка по вкладке ===== */

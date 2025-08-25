@@ -422,11 +422,12 @@
       const cols = m[0].length;
       for (let j = 3; j < cols; j++) {
         // id и name берём из строки 3 таблицы (index 2) — это модель
-        const modelRaw = String(safeCell(m, 2, j)).trim();
-        const id = modelRaw.toLowerCase();
-        if (!id) continue;
+        const typeRaw = String(safeCell(m, 0, j)).trim(); // тип станка (строка 1)
+        const modelRaw = String(safeCell(m, 2, j)).trim(); // модель (строка 3)
+        if (!modelRaw) continue;
 
-        const name = String(safeCell(m, 0, j)).trim();;
+        const id = modelRaw.toLowerCase();
+        const name = modelRaw;
         const brand = String(safeCell(m, 1, j)).trim();
 
         const item = {
@@ -443,7 +444,7 @@
           f56: (num(safeCell(m, R.toolSpeedRow, j)) > 0)
         };
         res.push(item);
-        (map[id] = map[id] || []).push(item);
+        (map[typeRaw] = map[typeRaw] || []).push(item);
       }
       return { res, map };
     }
@@ -453,16 +454,16 @@
       // Карта строк (0-based индексы):
       const R = {
         type: 0,
-        len: 9,
-        width: 10,
-        spindleSpeed: 44,
-        powerConst: 45,
-        powerMax: 46,
-        axisX: 19,
-        axisY: 20,
-        axisZ: 21,
-        taper: 48,
-        axisW: 22
+        len: 7,
+        width: 8,
+        spindleSpeed: 42,
+        powerConst: 43,
+        powerMax: 44,
+        axisX: 17,
+        axisY: 18,
+        axisZ: 19,
+        taper: 46,
+        axisW: 20
       };
       const cols = m[0].length;
       for (let j = 3; j < cols; j++) {

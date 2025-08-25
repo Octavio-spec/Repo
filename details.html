@@ -1,64 +1,149 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Карточка оборудования</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin: auto; }
-    h2 { margin-bottom: .5em; }
-    .info { background: #fff; border: 1px solid #ddd; padding: 16px; border-radius: 8px; }
-    img { max-width: 100%; border: 1px solid #eee; margin: 10px 0; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { padding: 6px 10px; border-bottom: 1px solid #eee; text-align: left; }
-    th { background: #f9f9f9; }
+    body { font-family: Arial, sans-serif; padding: 16px; max-width: 900px; margin: 0 auto; background:#f7f7f9; }
+    h2 { margin: 0 0 .75em 0; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:12px; }
+    .muted { color:#6b7280; }
+    table { width:100%; border-collapse: collapse; font-size:14px; }
+    th, td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
+    th { width:40%; background:#f9fafb; }
+    .toolbar { margin-bottom:10px; display:flex; gap:8px; align-items:center; }
+    .back { text-decoration:none; font-weight:600; color:#2563eb; }
+    pre#error { white-space:pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top:10px; color:#9b1c1c; }
   </style>
 </head>
 <body>
-  <h2 id="title">Загрузка...</h2>
-  <div class="info">
-    <img id="photo" src="" alt="Фото станка" />
-    <table id="details"></table>
+  <div class="toolbar">
+    <a class="back" href="index.html">← Назад к поиску</a>
+    <span class="muted" id="meta"></span>
+  </div>
+
+  <h2 id="title">Загрузка…</h2>
+
+  <div class="card">
+    <table id="kv"></table>
+    <pre id="error"></pre>
   </div>
 
 <script>
-const params = new URLSearchParams(window.location.search);
-const id = params.get("id");  // то, что мы передали из таблицы
+/* ===== Конфиги листов ===== */
+const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
+const GIDS = { lathe: "1008569495", milling: "361418967" };
+const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}&_=${Date.now()}`;
 
-async function loadData() {
-  const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
-  const GID = "1008569495"; // токарные, для примера
-  const url = `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(GID)}`;
+/* ===== Утилиты ===== */
+const qs = new URLSearchParams(location.search);
+const id  = decodeURIComponent(qs.get("id") || "").toLowerCase().trim(); // header ключ, который мы передаём из таблицы
+const tab = (qs.get("tab") || "lathe").toLowerCase();
+const gid = GIDS[tab] || GIDS.lathe;
 
-  const r = await fetch(url);
-  const text = await r.text();
-  const rows = text.split(/\r?\n/).map(l=>l.split(","));
-  
-  // ищем запись по header
-  const {res} = matrixToRecordsLathe(rows);
-  const item = res.find(m => m.header === id);
-  if(!item){ document.getElementById("title").textContent="Не найдено"; return; }
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function toNumberStrict(v){ if(v==null) return null; const s=String(v).trim().replace(',','.'); const m=s.match(/[+-]?\d+(\.\d+)?/); return m?parseFloat(m[0]):null; }
+function hasContent(v){ if(v==null) return false; const s=String(v).trim(); return s.length>0; }
 
-  document.getElementById("title").textContent = `${item.brand} ${item.name}`;
-  document.getElementById("photo").src = item.image || "no-photo.png"; // если есть колонка image
-
-  const tbl = document.getElementById("details");
-  tbl.innerHTML = `
-    <tr><th>Производитель</th><td>${item.brand}</td></tr>
-    <tr><th>Модель</th><td>${item.name}</td></tr>
-    <tr><th>Ø точения</th><td>${item.v9}</td></tr>
-    <tr><th>Длина</th><td>${item.v10}</td></tr>
-    <tr><th>Скорость шпинделя</th><td>${item.v34}</td></tr>
-    <tr><th>Патрон</th><td>${item.v35}</td></tr>
-  `;
+function parseCSV(text) {
+  const rows=[]; let row=[], cur='', q=false;
+  for (let i=0;i<text.length;i++){
+    const ch=text[i], next=text[i+1];
+    if(q){
+      if(ch==='"' && next === '"'){ cur+='"'; i++; }
+      else if(ch === '"'){ q=false; }
+      else { cur+=ch; }
+    }else{
+      if(ch === '"') q=true;
+      else if(ch === ','){ row.push(cur); cur=''; }
+      else if(ch === '\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else if(ch === '\r'){ /* skip */ }
+      else { cur+=ch; }
+    }
+  }
+  if(cur.length || row.length){ row.push(cur); rows.push(row); }
+  return rows;
 }
 
-// можно вынести matrixToRecordsLathe сюда или сделать облегчённую версию
-function matrixToRecordsLathe(m){
-  // ... твоя функция из index.html
+function rowText(m,r){
+  const a = String(m[r]?.[0] ?? "").trim();
+  const b = String(m[r]?.[1] ?? "").trim();
+  return a || b; // подпись берём из колонки A или B
 }
 
-loadData();
+/* ===== Загрузка и отрисовка ===== */
+async function main(){
+  if(!id){ fail("Не передан параметр id."); return; }
+
+  let matrix;
+  try{
+    const r = await fetch(csvUrl(gid));
+    if(!r.ok) throw new Error(`CSV HTTP ${r.status}`);
+    matrix = parseCSV(await r.text());
+  }catch(e){
+    fail("Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + e.message);
+    return;
+  }
+
+  if(!matrix.length){ fail("Таблица пуста."); return; }
+
+  // ищем столбец по header (строка 0)
+  const cols = matrix[0].length;
+  let col = -1;
+  for(let j=3;j<cols;j++){
+    const h = String(matrix[0][j] ?? "").toLowerCase().trim();
+    if(h && h === id){ col = j; break; }
+  }
+  if(col === -1){ fail("Модель не найдена по id: " + id); return; }
+
+  // заголовок (бренд/модель как в твоей структуре)
+  const brand = String(matrix[1]?.[col] ?? "").trim();
+  const name  = String(matrix[2]?.[col] ?? "").trim() || String(matrix[0]?.[col] ?? "").trim();
+  document.getElementById("title").textContent = (brand || name) ? `${brand} ${name}`.trim() : "Карточка оборудования";
+  document.getElementById("meta").textContent  = tab === "milling" ? "Фрезерные" : "Токарные";
+
+  // определяем последнюю непустую строку этого столбца
+  let last = matrix.length - 1;
+  while(last >= 0){
+    const label = rowText(matrix, last);
+    const val   = String(matrix[last]?.[col] ?? "").trim();
+    if(hasContent(label) || hasContent(val)) break;
+    last--;
+  }
+
+  // по желанию можно начинать с 1 или с 0 — оставлю 0, но пропущу «пустые» и явные служебные
+  const start = 0; // или 1, если хочешь не включать самую верхнюю строку
+  const rows = [];
+  for(let r = start; r <= last; r++){
+    const label = rowText(matrix, r);
+    const raw   = matrix[r]?.[col];
+    const value = (raw==null || String(raw).trim()==="") ? "" : String(raw);
+    if(!hasContent(label) && !hasContent(value)) continue;
+    // пропустим строки, которые точно не нужны в карточке (например, кнопки/титульник)
+    const lLower = label.toLowerCase();
+    if(/титуль/i.test(lLower)) continue;
+
+    rows.push({ label, value });
+  }
+
+  // рендер таблицы
+  const kv = document.getElementById("kv");
+  kv.innerHTML = rows.map(({label,value}) => `
+    <tr>
+      <th>${esc(label)}</th>
+      <td>${esc(value)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="2" class="muted">Нет данных</td></tr>`;
+}
+
+function fail(msg){
+  document.getElementById("error").textContent = msg;
+  document.getElementById("error").style.display = "block";
+  document.getElementById("title").textContent = "Ошибка";
+}
+
+main();
 </script>
 </body>
 </html>

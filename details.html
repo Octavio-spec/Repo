@@ -16,7 +16,7 @@
     .toolbar { margin-bottom:10px; display:flex; gap:8px; align-items:center; }
     .back { text-decoration:none; font-weight:600; color:#2563eb; }
     pre#error { white-space:pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top:10px; color:#9b1c1c; }
-    .section-head th { background:#f3f4f6; }
+    
   </style>
 </head>
 <body>
@@ -47,7 +47,19 @@ const tab = (qs.get("tab") || "lathe").toLowerCase();
 const gid = GIDS[tab] || GIDS.lathe;
 
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-function clean(s){ return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
+function clean(s) { return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
+function pickLabelUnit(row) {
+    const A = clean(row?.[0]);
+    const B = clean(row?.[1]);
+    const C = clean(row?.[2]);
+
+    if (!A && B) {
+        // подпись в B, единицы в C
+        return { label: B, unit: C };
+    }
+    // по умолчанию: подпись в A, единицы в B
+    return { label: A, unit: B };
+}
 function hasValue(v){
   const s = clean(v);
   if (!s) return false;
@@ -82,45 +94,40 @@ function labelAt(matrix, row){ return clean(matrix[row]?.[0]); }
 function unitAt (matrix, row){ return clean(matrix[row]?.[1]); }
 
 /* Собираем строки Параметр | Значение | Ед. изм. */
-function buildRows(matrix, col){
-  // последние содержательные строки
-  let last = matrix.length - 1;
-  while (last >= 0) {
-    const a = labelAt(matrix, last);
-    const b = unitAt (matrix, last);
-    const v = clean(matrix[last]?.[col]);
-    if (a || b || hasValue(v)) break;
-    last--;
-  }
+function buildRows(matrix, col) {
+    // найти последнюю «содержательную» строку
+    let last = matrix.length - 1;
+    while (last >= 0) {
+        const { label, unit } = pickLabelUnit(matrix[last]);
+        const v = clean(matrix[last]?.[col]);
+        if (label || unit || v) break;
+        last--;
+    }
 
-  const top = [];     // первые 3 строки: (A | value)
-  const rest = [];    // остальные: (A | B | value)
+    const top = [];
+    const rest = [];
+    const HEAD_TOKENS = new Set(["параметр", "значение", "ед. изм.", "ед.изм.", "ед изм", "единицы измерения"]);
 
-  // какие подписи/единицы считать "шапкой" и выбрасывать
-  const HEAD_TOKENS = new Set(["параметр","значение","ед. изм.","ед.изм.","ед изм","единицы измерения"]);
+    // первые 3 строки (тип, производитель, модель) — две колонки
+    for (let i = 0; i <= Math.min(2, last); i++) {
+        const { label } = pickLabelUnit(matrix[i]);   // подпись (из A или B)
+        const value = clean(matrix[i]?.[col]);
+        if (!value) continue;
+        top.push({ label, value });
+    }
 
-  // первые 3 строки как есть
-  for (let i = 0; i <= Math.min(2, last); i++) {
-    const label = labelAt(matrix, i);
-    const value = clean(matrix[i]?.[col]);
-    if (!hasValue(value)) continue;
-    top.push({ label, value });
-  }
+    // остальное: три колонки
+    for (let i = 3; i <= last; i++) {
+        const { label, unit } = pickLabelUnit(matrix[i]);
+        const value = clean(matrix[i]?.[col]);
+        if (!value) continue;
 
-  // остальные строки
-  for (let i = 3; i <= last; i++) {
-    const label = labelAt(matrix, i);
-    const unit  = unitAt (matrix, i);
-    const value = clean(matrix[i]?.[col]);
+        const l = label.toLowerCase(), u = (unit || "").toLowerCase(), v = value.toLowerCase();
+        if (HEAD_TOKENS.has(l) || HEAD_TOKENS.has(u) || HEAD_TOKENS.has(v)) continue;
 
-    if (!hasValue(value)) continue;
-    const l = label.toLowerCase(), u = unit.toLowerCase(), v = value.toLowerCase();
-    if (HEAD_TOKENS.has(l) || HEAD_TOKENS.has(u) || HEAD_TOKENS.has(v)) continue; // выбросить шапки в теле
-
-    rest.push({ label, unit, value });
-  }
-
-  return { top, rest };
+        rest.push({ label, unit, value });
+    }
+    return { top, rest };
 }
 
 function fail(msg){

@@ -260,6 +260,7 @@ function fillSelectMilling(dataStore){
 }
 
 function openDetails(id) {
+  // пока без картинок — просто открываем детальную страницу (или можно alert/id)
   window.open(`details.html?id=${id}`, "_blank");
 }
 
@@ -295,7 +296,6 @@ function renderTableLathe(items){
     </thead>
     <tbody>`;
   for(const m of items){
-    
     html += `
       <tr class="res-row" data-id="${encodeURIComponent(m.header)}">
         <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
@@ -317,7 +317,7 @@ function renderTableMilling(items){
   let html=`
   <table>
     <thead>
-      <tr class="res-row" data-id="${encodeURIComponent(m.header)}">
+      <tr onclick = "openDetails('${encodeURIComponent(m.header)}')">
         <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
         <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
         <th>Производитель</th>
@@ -338,7 +338,7 @@ function renderTableMilling(items){
     <tbody>`;
   for(const m of items){
     html += `
-      <tr>
+      <tr class="res-row" data-id="${encodeURIComponent(m.header)}">
         <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
         <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
         <td>${fmt(m.type)}</td>

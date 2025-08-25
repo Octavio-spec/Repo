@@ -36,6 +36,15 @@ const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
 const GIDS = { lathe: "1008569495", milling: "361418967" };
 const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}&_=${Date.now()}`;
 
+function clean(s){ return String(s ?? "").replace(/\u00A0/g, " ").trim(); } // убираем неразрывные пробелы
+function hasValue(v){
+  const s = clean(v);
+  if (s === "") return false;
+  if (/^[-–—]+$/.test(s)) return false;       // только тире
+  if (/^(нет|n\/?a|na)$/i.test(s)) return false;
+  return true;
+}
+
 /* ===== Утилиты ===== */
 const qs = new URLSearchParams(location.search);
 const id  = decodeURIComponent(qs.get("id") || "").toLowerCase().trim(); // header ключ, который мы передаём из таблицы
@@ -110,18 +119,18 @@ async function main(){
   // найти последнюю строку, где в этом столбце есть подпись (A/B) или значение
   let last = matrix.length - 1;
   while (last >= 0) {
-    const labelHere = rowText(matrix, last).trim();
-    const valHere = (matrix[last] && matrix[last][col]) ? String(matrix[last][col]).trim() : "";
-    if (labelHere !== "" || valHere !== "") break;
+    const labelHere = clean(rowText(matrix, last));
+    const valHere   = clean(matrix[last]?.[col]);
+    if (labelHere !== "" || hasValue(valHere)) break;  // учитываем «смысловую» пустоту
     last--;
   }
 
   for (let r = start; r <= last; r++) {
-    const label = rowText(matrix, r).trim();
-    const value = (matrix[r] && matrix[r][col]) ? String(matrix[r][col]).trim() : "";
+    const label = clean(rowText(matrix, r));
+    const value = clean(matrix[r]?.[col]);
 
-    // полностью пустые — пропускаем
-    if (label === "" && value === "") continue;
+    // пропускаем, если НЕТ значения (пусто / тире / "нет" / N/A)
+    if (!hasValue(value)) continue;
     // служебные строки — пропускаем
     if (/титуль/i.test(label)) continue;
 

@@ -170,78 +170,77 @@ function parseCSV(text) {
 
 /* ===== Преобразование данных ===== */
 /* Токарные — как раньше */
-function matrixToRecordsLathe(m){
-  const res=[], map={};
-  if(!m.length) return {res,map};
-  const R = { v9:8, v10:9, v34:33, v35:34, f15:14, f17:16, toolSpeedRow:55 };
+function matrixToRecordsLathe(m) {
+  const res = [], map = {};
+  if (!m.length) return { res, map };
+  const R = detectRowPositionsLathe(m); // как у тебя
+
   const cols = m[0].length;
-  for (let j=3;j<cols;j++){
-    const headerRaw = String(safeCell(m, 0, j)).trim();
-    const id = headerRaw.toLowerCase();     // ключ для URL/поиска
+  for (let j = 3; j < cols; j++) {
+    const headerRaw = String(safeCell(m, 0, j)).trim(); // ← заголовок столбца
+    const id = headerRaw.toLowerCase();               // ← ключ для URL/поиска
     if (!id) continue;
-    let name = String(safeCell(m,2,j)).trim();
-    if(!name || name.startsWith("#")) name = String(safeCell(m,0,j)).trim();
-    const brand = String(safeCell(m,1,j)).trim();
+
+    let name = String(safeCell(m, 2, j)).trim();
+    if (!name || name.startsWith("#")) name = headerRaw;
+    const brand = String(safeCell(m, 1, j)).trim();
+
     const item = {
-      id, header:headerRaw, name, brand,
-      v9:  num(safeCell(m,R.v9, j)),
-      v10: num(safeCell(m,R.v10,j)),
-      v34: num(safeCell(m,R.v34,j)),
-      v35: num(safeCell(m,R.v35,j)),
-      f15: boolStrict(safeCell(m,R.f15,j)),
-      f17: boolStrict(safeCell(m,R.f17,j)),
-      f56: (num(safeCell(m,R.toolSpeedRow,j))>0)
+      id,                    // ← НОВОЕ: стабильный ключ
+      header: headerRaw,     // человекочитаемое
+      name, brand,
+      v9: num(safeCell(m, R.v9, j)),
+      v10: num(safeCell(m, R.v10, j)),
+      v34: num(safeCell(m, R.v34, j)),
+      v35: num(safeCell(m, R.v35, j)),
+      f15: boolStrict(safeCell(m, R.f15, j)),
+      f17: boolStrict(safeCell(m, R.f17, j)),
+      f56: (num(safeCell(m, R.toolSpeedRow, j)) > 0)
     };
+
     res.push(item);
-    (map[id]=map[id]||[]).push(item);
+    (map[id] = map[id] || []).push(item); // ключ — ТОТ ЖЕ id
   }
-  return {res,map};
+  return { res, map };
 }
 
 /* Фрезерные — по твоей карте строк */
-function matrixToRecordsMilling(m){
-  const res=[], map={};
-  if(!m.length) return {res,map};
-  const R = {
-    type: 0,          // C3 = 1  -> индекс 0
-    len: 7,           // C4 = 8  -> 7
-    width: 8,         // C5 = 9  -> 8
-    spindleSpeed: 42, // C6 = 43 -> 42
-    powerConst: 43,   // C7 = 44 -> 43
-    powerMax: 44,     // C8 = 45 -> 44
-    axisX: 17,        // C9 = 18 -> 17
-    axisY: 18,        // C10 = 19 -> 18
-    axisZ: 19,        // C11 = 20 -> 19
-    taper: 46,        // C12 = 47 -> 46
-    axisW: 20         // C13 = 21 -> 20
-  };
+function matrixToRecordsMilling(m) {
+  const res = [], map = {};
+  if (!m.length) return { res, map };
+  const R = { type: 2, len: 9, width: 10, spindleSpeed: 44, powerConst: 45, powerMax: 46, axisX: 19, axisY: 20, axisZ: 21, taper: 48, axisW: 22 };
+
   const cols = m[0].length;
-  for (let j=3;j<cols;j++){
-    const headerRaw = String(safeCell(m, 0, j)).trim();
-    const id = headerRaw.toLowerCase();
+  for (let j = 3; j < cols; j++) {
+    const headerRaw = String(safeCell(m, 0, j)).trim(); // ← заголовок столбца
+    const id = headerRaw.toLowerCase();               // ← ключ
     if (!id) continue;
-    let name = String(safeCell(m,2,j)).trim();
-    if(!name || name.startsWith("#")) name = String(safeCell(m,0,j)).trim();
-    const brand = String(safeCell(m,1,j)).trim();
+
+    let name = String(safeCell(m, 2, j)).trim();
+    if (!name || name.startsWith("#")) name = headerRaw;
+    const brand = String(safeCell(m, 1, j)).trim();
 
     const item = {
-      id, header: headerRaw, name, brand,
-      type:  String(safeCell(m,R.type,j)).trim(),
-      len:   num(safeCell(m,R.len,j)),
-      width: num(safeCell(m,R.width,j)),
-      spindleSpeed: num(safeCell(m,R.spindleSpeed,j)),
-      powerConst:   num(safeCell(m,R.powerConst,j)),
-      powerMax:     num(safeCell(m,R.powerMax,j)),
-      axisX: num(safeCell(m,R.axisX,j)),
-      axisY: num(safeCell(m,R.axisY,j)),
-      axisZ: num(safeCell(m,R.axisZ,j)),
-      taper: String(safeCell(m,R.taper,j)).trim(),
-      axisW: num(safeCell(m,R.axisW,j))
+      id,
+      header: headerRaw,
+      name, brand,
+      type: String(safeCell(m, R.type, j)).trim(),
+      len: num(safeCell(m, R.len, j)),
+      width: num(safeCell(m, R.width, j)),
+      spindleSpeed: num(safeCell(m, R.spindleSpeed, j)),
+      powerConst: num(safeCell(m, R.powerConst, j)),
+      powerMax: num(safeCell(m, R.powerMax, j)),
+      axisX: num(safeCell(m, R.axisX, j)),
+      axisY: num(safeCell(m, R.axisY, j)),
+      axisZ: num(safeCell(m, R.axisZ, j)),
+      taper: String(safeCell(m, R.taper, j)).trim(),
+      axisW: num(safeCell(m, R.axisW, j))
     };
+
     res.push(item);
-    (map[id]=map[id]||[]).push(item);
+    (map[id] = map[id] || []).push(item);
   }
-  return {res,map};
+  return { res, map };
 }
 
 /* Селекты: токарные = по заголовкам; фрезерные = по значениям type/taper */

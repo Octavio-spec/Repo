@@ -176,13 +176,14 @@ function matrixToRecordsLathe(m){
   const R = { v9:8, v10:9, v34:33, v35:34, f15:14, f17:16, toolSpeedRow:55 };
   const cols = m[0].length;
   for (let j=3;j<cols;j++){
-    const h = String(safeCell(m,0,j)).toLowerCase().trim();
-    if(!h) continue;
+    const headerRaw = String(safeCell(m, 0, j)).trim();
+    const id = headerRaw.toLowerCase();     // ключ для URL/поиска
+    if (!id) continue;
     let name = String(safeCell(m,2,j)).trim();
     if(!name || name.startsWith("#")) name = String(safeCell(m,0,j)).trim();
     const brand = String(safeCell(m,1,j)).trim();
     const item = {
-      header:h, name, brand,
+      id, header:headerRaw, name, brand,
       v9:  num(safeCell(m,R.v9, j)),
       v10: num(safeCell(m,R.v10,j)),
       v34: num(safeCell(m,R.v34,j)),
@@ -192,7 +193,7 @@ function matrixToRecordsLathe(m){
       f56: (num(safeCell(m,R.toolSpeedRow,j))>0)
     };
     res.push(item);
-    (map[h]=map[h]||[]).push(item);
+    (map[id]=map[id]||[]).push(item);
   }
   return {res,map};
 }
@@ -216,14 +217,15 @@ function matrixToRecordsMilling(m){
   };
   const cols = m[0].length;
   for (let j=3;j<cols;j++){
-    const h = String(safeCell(m,0,j)).toLowerCase().trim();
-    if(!h) continue;
+    const headerRaw = String(safeCell(m, 0, j)).trim();
+    const id = headerRaw.toLowerCase();
+    if (!id) continue;
     let name = String(safeCell(m,2,j)).trim();
     if(!name || name.startsWith("#")) name = String(safeCell(m,0,j)).trim();
     const brand = String(safeCell(m,1,j)).trim();
 
     const item = {
-      header: h, name, brand,
+      id, header: headerRaw, name, brand,
       type:  String(safeCell(m,R.type,j)).trim(),
       len:   num(safeCell(m,R.len,j)),
       width: num(safeCell(m,R.width,j)),
@@ -237,7 +239,7 @@ function matrixToRecordsMilling(m){
       axisW: num(safeCell(m,R.axisW,j))
     };
     res.push(item);
-    (map[h]=map[h]||[]).push(item);
+    (map[id]=map[id]||[]).push(item);
   }
   return {res,map};
 }
@@ -261,19 +263,20 @@ function fillSelectMilling(dataStore){
   taperSel.innerHTML='<option value="">— Конус шпинделя —</option>' + [...tapers].sort().map(v=>`<option value="${v}">${v}</option>`).join('');
 }
 
-function openDetails(id) {
-  // пока без картинок — просто открываем детальную страницу (или можно alert/id)
-  window.open(`details.html?id=${id}`, "_blank");
+function openDetails(rawId) {
+  const id = encodeURIComponent(rawId);
+  const tabParam = (typeof activeTab !== "undefined")
+    ? `&tab=${encodeURIComponent(activeTab)}`
+    : "";
+   window.location.href = `details.html?id=${id}${tabParam}`;
 }
 
 function setupRowClickDelegation() {
-  const wrap = document.getElementById("results");
-  wrap.addEventListener("click", (e) => {
+  document.getElementById("results").addEventListener("click", (e) => {
     const tr = e.target.closest("tr.res-row");
-    if (!tr || !wrap.contains(tr)) return;
-    const id = tr.dataset.id;
-    if (id) openDetails(id);
-  });
+    if (!tr) return;
+    openDetails(tr.dataset.id);
+   });
 }
 
 function esc(s){ return String(s??"").replace(/[&<>"']/g, m=>({
@@ -285,9 +288,9 @@ function renderTableLathe(items){
   if(!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
 
   const rows = items.map(it => `
-    <tr class="res-row" data-id="${encodeURIComponent(it.header)}">
-      <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
-      <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+    <tr class="res-row" data-id="${it.id}">
+      <td><strong>${it.brand || "<span class='muted'>—</span>"}</strong></td>
+      <td class="td-name">${it.name || "<span class='muted'>—</span>"}</td>
       <td>${fmt(it.v9)}</td>
       <td>${fmt(it.v10)}</td>
       <td>${fmt(it.v34)}</td>
@@ -321,9 +324,9 @@ function renderTableMilling(items){
   if(!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
 
   const rows = items.map(it => `
-    <tr class="res-row" data-id="${encodeURIComponent(it.header)}">
-      <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
-      <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+    <tr class="res-row" data-id="${it.id}">
+      <td><strong>${it.brand || "<span class='muted'>—</span>"}</strong></td>
+      <td class="td-name">${it.name || "<span class='muted'>—</span>"}</td>
       <td>${fmt(it.type)}</td>
       <td>${fmt(it.len)}</td>
       <td>${fmt(it.width)}</td>

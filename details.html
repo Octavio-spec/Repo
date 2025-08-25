@@ -16,7 +16,7 @@
     .toolbar { margin-bottom:10px; display:flex; gap:8px; align-items:center; }
     .back { text-decoration:none; font-weight:600; color:#2563eb; }
     pre#error { white-space:pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top:10px; color:#9b1c1c; }
-    
+    .section-head th { background:#f3f4f6; }
   </style>
 </head>
 <body>
@@ -42,33 +42,20 @@ const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPRE
 
 /* ===== Утилиты ===== */
 const qs = new URLSearchParams(location.search);
-const id  = decodeURIComponent(qs.get("id") || "").toLowerCase().trim(); // header ключ
+const id  = (qs.get("id") ? decodeURIComponent(qs.get("id")) : "").toLowerCase().trim();
 const tab = (qs.get("tab") || "lathe").toLowerCase();
 const gid = GIDS[tab] || GIDS.lathe;
 
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-function clean(s) { return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
-function pickLabelUnit(row) {
-    const A = clean(row?.[0]);
-    const B = clean(row?.[1]);
-    const C = clean(row?.[2]);
-
-    if (!A && B) {
-        // подпись в B, единицы в C
-        return { label: B, unit: C };
-    }
-    // по умолчанию: подпись в A, единицы в B
-    return { label: A, unit: B };
-}
+function clean(s){ return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
 function hasValue(v){
   const s = clean(v);
   if (!s) return false;
-  if (/^[-–—]+$/.test(s)) return false;      // только тире
+  if (/^[-–—]+$/.test(s)) return false;
   if (/^(нет|n\/?a|na)$/i.test(s)) return false;
   return true;
 }
 
-// CSV-парсер с кавычками
 function parseCSV(text) {
   const rows=[]; let row=[], cur='', quoted=false;
   for (let i=0;i<text.length;i++){
@@ -81,7 +68,7 @@ function parseCSV(text) {
       if (ch === '"') quoted=true;
       else if (ch === ','){ row.push(cur); cur=''; }
       else if (ch === '\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
-      else if (ch === '\r'){ /* skip */ }
+      else if (ch === '\r'){ }
       else { cur+=ch; }
     }
   }
@@ -89,45 +76,43 @@ function parseCSV(text) {
   return rows;
 }
 
-// подпись параметра берём из A; единица измерения — из B
-function labelAt(matrix, row){ return clean(matrix[row]?.[0]); }
-function unitAt (matrix, row){ return clean(matrix[row]?.[1]); }
+function pickLabelUnit(row){
+  const A = clean(row?.[0]);
+  const B = clean(row?.[1]);
+  const C = clean(row?.[2]);
+  if (!A && B) return { label: B, unit: C };
+  return { label: A, unit: B };
+}
 
-/* Собираем строки Параметр | Значение | Ед. изм. */
-function buildRows(matrix, col) {
-    // найти последнюю «содержательную» строку
-    let last = matrix.length - 1;
-    while (last >= 0) {
-        const { label, unit } = pickLabelUnit(matrix[last]);
-        const v = clean(matrix[last]?.[col]);
-        if (label || unit || v) break;
-        last--;
-    }
+function buildRows(matrix, col){
+  let last = matrix.length - 1;
+  while (last >= 0) {
+    const {label, unit} = pickLabelUnit(matrix[last]);
+    const v = clean(matrix[last]?.[col]);
+    if (label || unit || v) break;
+    last--;
+  }
 
-    const top = [];
-    const rest = [];
-    const HEAD_TOKENS = new Set(["параметр", "значение", "ед. изм.", "ед.изм.", "ед изм", "единицы измерения"]);
+  const top = [];
+  const rest = [];
+  const HEAD_TOKENS = new Set(["параметр","значение","ед. изм.","ед.изм.","ед изм","единицы измерения"]);
 
-    // первые 3 строки (тип, производитель, модель) — две колонки
-    for (let i = 0; i <= Math.min(2, last); i++) {
-        const { label } = pickLabelUnit(matrix[i]);   // подпись (из A или B)
-        const value = clean(matrix[i]?.[col]);
-        if (!value) continue;
-        top.push({ label, value });
-    }
+  for (let i = 0; i <= Math.min(2, last); i++) {
+    const {label} = pickLabelUnit(matrix[i]);
+    const value   = clean(matrix[i]?.[col]);
+    if (!value) continue;
+    top.push({ label, value });
+  }
 
-    // остальное: три колонки
-    for (let i = 3; i <= last; i++) {
-        const { label, unit } = pickLabelUnit(matrix[i]);
-        const value = clean(matrix[i]?.[col]);
-        if (!value) continue;
-
-        const l = label.toLowerCase(), u = (unit || "").toLowerCase(), v = value.toLowerCase();
-        if (HEAD_TOKENS.has(l) || HEAD_TOKENS.has(u) || HEAD_TOKENS.has(v)) continue;
-
-        rest.push({ label, unit, value });
-    }
-    return { top, rest };
+  for (let i = 3; i <= last; i++) {
+    const {label, unit} = pickLabelUnit(matrix[i]);
+    const value = clean(matrix[i]?.[col]);
+    if (!value) continue;
+    const l = label.toLowerCase(), u = (unit||"").toLowerCase(), v = value.toLowerCase();
+    if (HEAD_TOKENS.has(l) || HEAD_TOKENS.has(u) || HEAD_TOKENS.has(v)) continue;
+    rest.push({ label, unit, value });
+  }
+  return { top, rest };
 }
 
 function fail(msg){
@@ -137,11 +122,9 @@ function fail(msg){
   document.getElementById("title").textContent = "Ошибка";
 }
 
-/* ===== Основной поток ===== */
 async function main(){
   if(!id){ fail("Не передан параметр id."); return; }
 
-  // грузим CSV
   let matrix;
   try{
     const resp = await fetch(csvUrl(gid));
@@ -155,7 +138,6 @@ async function main(){
 
   if(!matrix.length){ fail("Таблица пуста."); return; }
 
-  // ищем столбец модели по header в строке 0
   const cols = matrix[0].length;
   let col = -1;
   for(let j=3;j<cols;j++){
@@ -164,56 +146,45 @@ async function main(){
   }
   if(col === -1){ fail("Модель не найдена по id: " + id); return; }
 
-  // заголовок
   const brand = clean(matrix[1]?.[col]);
   const name  = clean(matrix[2]?.[col]) || clean(matrix[0]?.[col]);
   document.getElementById("title").textContent = (brand || name) ? `${brand} ${name}`.trim() : "Карточка оборудования";
   document.getElementById("meta").textContent  = tab === "milling" ? "Фрезерные" : "Токарные";
 
-    const { top, rest } = buildRows(matrix, col);
+  const { top, rest } = buildRows(matrix, col);
 
-    let html = "<tbody>";
-
-    /* --- первые 3 строки: Параметр | Значение --- */
-    for (const row of top) {
-        html += `
-    <tr>
-      <th>${esc(row.label)}</th>
-      <td colspan="2"><strong>${esc(row.value)}</strong></td>
-    </tr>
-  `;
-    }
-
-    /* --- секционная шапка: Параметр — Ед. изм. — Значение --- */
+  let html = "<tbody>";
+  for (const row of top) {
     html += `
-  <tr class="section-head">
-    <th><strong>Параметр</strong></th>
-    <th><strong>Ед. изм.</strong></th>
-    <th><strong>Значение</strong></th>
-  </tr>
-`;
+      <tr>
+        <th>${esc(row.label)}</th>
+        <td colspan="2"><strong>${esc(row.value)}</strong></td>
+      </tr>`;
+  }
+  if(rest.length){
+    html += `
+      <tr class="section-head">
+        <th><strong>Параметр</strong></th>
+        <th><strong>Ед. изм.</strong></th>
+        <th><strong>Значение</strong></th>
+      </tr>`;
+  }
+  for (const row of rest) {
+    html += `
+      <tr>
+        <th>${esc(row.label)}</th>
+        <td>${esc(row.unit)}</td>
+        <td><strong>${esc(row.value)}</strong></td>
+      </tr>`;
+  }
+  if (top.length===0 && rest.length===0){
+    html += `<tr><td colspan="3" class="muted">Нет данных</td></tr>`;
+  }
+  html += "</tbody>";
 
-    /* --- остальные строки: Параметр | Ед. изм. | Значение --- */
-    for (const row of rest) {
-        html += `
-    <tr>
-      <th>${esc(row.label)}</th>
-      <td>${esc(row.unit)}</td>
-      <td><strong>${esc(row.value)}</strong></td>
-    </tr>
-  `;
-    }
-
-    if (top.length === 0 && rest.length === 0) {
-        html += `<tr><td colspan="3" class="muted">Нет данных</td></tr>`;
-    }
-    html += "</tbody>";
-
-    document.getElementById("kv").innerHTML = html;
-
+  document.getElementById("kv").innerHTML = html;
 }
 
-// безопасный вызов
 main().catch(err => {
   fail("Неожиданная ошибка: " + (err && err.message ? err.message : String(err)));
 });

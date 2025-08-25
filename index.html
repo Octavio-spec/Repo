@@ -245,10 +245,10 @@
         <select id="L-C3">
           <option value="">— Все типы —</option>
         </select>
-        <input type="number" id="L-C4" placeholder="Макс. диаметр точения" />
-        <input type="number" id="L-C5" placeholder="Макс. длина точения" />
-        <input type="number" id="L-C6" placeholder="Макс. скорость шпинделя" />
-        <input type="number" id="L-C7" placeholder="Диаметр патрона" />
+        <input type="number" id="L-C4" placeholder="Макс. диаметр точения, мм" />
+        <input type="number" id="L-C5" placeholder="Макс. длина точения, мм" />
+        <input type="number" id="L-C6" placeholder="Макс. скорость шпинделя, об/мин" />
+        <input type="number" id="L-C7" placeholder="Диаметр патрона, дюйм" />
         <div class="checkbox-group"><label><input type="checkbox" id="L-C8" /> Ось Y</label></div>
         <div class="checkbox-group"><label><input type="checkbox" id="L-C9" /> Противошпиндель</label></div>
         <div class="checkbox-group"><label><input type="checkbox" id="L-C10" /> Приводной инструмент</label></div>
@@ -322,6 +322,14 @@
     }
     const safeCell = (m, r, c) => (m[r] && m[r][c] !== undefined) ? m[r][c] : '';
     function showErr(id, msg) { const b = document.getElementById(id); b.textContent = msg; b.style.display = 'block'; }
+
+    function getNumInput(id) {
+      const raw = document.getElementById(id).value;
+      const s = String(raw).replace(/\s+/g, "").replace(",", ".");
+      const n = parseFloat(s);
+      return Number.isFinite(n) ? n : 0;
+    }
+
 
     /* CSV-парсер c поддержкой кавычек/запятых */
     function parseCSV(text) {
@@ -418,7 +426,7 @@
         const id = modelRaw.toLowerCase();
         if (!id) continue;
 
-        const name = modelRaw;
+        const name = String(safeCell(m, 0, j)).trim();;
         const brand = String(safeCell(m, 1, j)).trim();
 
         const item = {
@@ -444,7 +452,7 @@
       const res = [], map = {}; if (!m.length) return { res, map };
       // Карта строк (0-based индексы):
       const R = {
-        type: 2,
+        type: 0,
         len: 9,
         width: 10,
         spindleSpeed: 44,
@@ -628,10 +636,10 @@
       if (!dataStore.length) { alert('Данные ещё загружаются…'); return; }
 
       const C3 = document.getElementById('L-C3').value;
-      const C4 = +document.getElementById('L-C4').value || 0;
-      const C5 = +document.getElementById('L-C5').value || 0;
-      const C6 = +document.getElementById('L-C6').value || 0;
-      const C7 = +document.getElementById('L-C7').value || 0;
+      const C4 = getNumInput('L-C4');  // Ø точения
+      const C5 = getNumInput('L-C5');  // длина
+      const C6 = getNumInput('L-C6');  // скорость шпинделя
+      const C7 = getNumInput('L-C7');  // патрон
       const C8 = document.getElementById('L-C8').checked;
       const C9 = document.getElementById('L-C9').checked;
       const C10 = document.getElementById('L-C10').checked;
@@ -640,10 +648,10 @@
       const matches = [];
       for (const item of cand) {
         if (!item.name) continue;
-        if (C4 && item.v9 !== -1 && (C4 > item.v9 || (C4 + 100) < item.v9)) continue;
-        if (C5 && item.v10 !== -1 && (C5 > item.v10 || (C5 + C5 * 1.5) < item.v10)) continue;
-        if (C6 && item.v34 !== -1 && (C6 > item.v34)) continue;
-        if (C7 && item.v35 !== -1 && (item.v35 < C7)) continue; // патрон ≥ требуемого
+        if (C4 && (item.v9 === -1 || C4 > item.v9 || (C4 + 100) < item.v9)) continue;
+        if (C5 && (item.v10 === -1 || C5 > item.v10 || (C5 + C5 * 1.5) < item.v10)) continue;
+        if (C6 && (item.v34 === -1 || item.v34 < C6)) continue;
+        if (C7 && (item.v35 === -1 || item.v35 < C7)) continue; // патрон ≥ требуемого
         if (C8 && !item.f15) continue;
         if (C9 && !item.f17) continue;
         if (C10 && !item.f56) continue;
@@ -658,14 +666,14 @@
 
       const F = {
         type: document.getElementById('M-C3').value.trim(),
-        len: +document.getElementById('M-C4').value || 0,
-        width: +document.getElementById('M-C5').value || 0,
-        spin: +document.getElementById('M-C6').value || 0,
-        pConst: +document.getElementById('M-C7').value || 0,
-        pMax: +document.getElementById('M-C8').value || 0,
-        x: +document.getElementById('M-C9').value || 0,
-        y: +document.getElementById('M-C10').value || 0,
-        z: +document.getElementById('M-C11').value || 0,
+        len: getNumInput('M-C4'),
+        width: getNumInput('M-C5'),
+        spin: getNumInput('M-C6'),
+        pConst: getNumInput('M-C7'),
+        pMax: getNumInput('M-C8'),
+        x: getNumInput('M-C9'),
+        y: getNumInput('M-C10'),
+        z: getNumInput('M-C11'),
         taper: document.getElementById('M-C12').value.trim(),
         w: document.getElementById('M-C13').checked
       };
@@ -675,14 +683,14 @@
         if (!it.name) continue;
         if (F.type && String(it.type).trim() !== F.type) continue;
         if (F.taper && String(it.taper).trim() !== F.taper) continue;
-        if (F.len && it.len !== -1 && it.len < F.len) continue;
-        if (F.width && it.width !== -1 && it.width < F.width) continue;
-        if (F.spin && it.spindleSpeed !== -1 && it.spindleSpeed < F.spin) continue;
-        if (F.pConst && it.powerConst !== -1 && it.powerConst < F.pConst) continue;
-        if (F.pMax && it.powerMax !== -1 && it.powerMax < F.pMax) continue;
-        if (F.x && it.axisX !== -1 && it.axisX < F.x) continue;
-        if (F.y && it.axisY !== -1 && it.axisY < F.y) continue;
-        if (F.z && it.axisZ !== -1 && it.axisZ < F.z) continue;
+        if (F.len && (it.len === -1 || it.len < F.len)) continue;
+        if (F.width && (it.width === -1 || it.width < F.width)) continue;
+        if (F.spin && (it.spindleSpeed === -1 || it.spindleSpeed < F.spin)) continue;
+        if (F.pConst && (it.powerConst === -1 || it.powerConst < F.pConst)) continue;
+        if (F.pMax && (it.powerMax === -1 || it.powerMax < F.pMax)) continue;
+        if (F.x && (it.axisX === -1 || it.axisX < F.x)) continue;
+        if (F.y && (it.axisY === -1 || it.axisY < F.y)) continue;
+        if (F.z && (it.axisZ === -1 || it.axisZ < F.z)) continue;
         if (F.w && !(it.axisW > 0)) continue; // ось W должна существовать
         matches.push(it);
       }

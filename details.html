@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Карточка оборудования</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; max-width: 900px; margin: auto; }
+    h2 { margin-bottom: .5em; }
+    .info { background: #fff; border: 1px solid #ddd; padding: 16px; border-radius: 8px; }
+    img { max-width: 100%; border: 1px solid #eee; margin: 10px 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 6px 10px; border-bottom: 1px solid #eee; text-align: left; }
+    th { background: #f9f9f9; }
+  </style>
+</head>
+<body>
+  <h2 id="title">Загрузка...</h2>
+  <div class="info">
+    <img id="photo" src="" alt="Фото станка" />
+    <table id="details"></table>
+  </div>
+
+<script>
+const params = new URLSearchParams(window.location.search);
+const id = params.get("id");  // то, что мы передали из таблицы
+
+async function loadData() {
+  const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
+  const GID = "1008569495"; // токарные, для примера
+  const url = `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(GID)}`;
+
+  const r = await fetch(url);
+  const text = await r.text();
+  const rows = text.split(/\r?\n/).map(l=>l.split(","));
+  
+  // ищем запись по header
+  const {res} = matrixToRecordsLathe(rows);
+  const item = res.find(m => m.header === id);
+  if(!item){ document.getElementById("title").textContent="Не найдено"; return; }
+
+  document.getElementById("title").textContent = `${item.brand} ${item.name}`;
+  document.getElementById("photo").src = item.image || "no-photo.png"; // если есть колонка image
+
+  const tbl = document.getElementById("details");
+  tbl.innerHTML = `
+    <tr><th>Производитель</th><td>${item.brand}</td></tr>
+    <tr><th>Модель</th><td>${item.name}</td></tr>
+    <tr><th>Ø точения</th><td>${item.v9}</td></tr>
+    <tr><th>Длина</th><td>${item.v10}</td></tr>
+    <tr><th>Скорость шпинделя</th><td>${item.v34}</td></tr>
+    <tr><th>Патрон</th><td>${item.v35}</td></tr>
+  `;
+}
+
+// можно вынести matrixToRecordsLathe сюда или сделать облегчённую версию
+function matrixToRecordsLathe(m){
+  // ... твоя функция из index.html
+}
+
+loadData();
+</script>
+</body>
+</html>

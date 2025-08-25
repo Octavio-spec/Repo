@@ -29,8 +29,8 @@
     }
     .form-box button { background:#2563eb; color:#fff; border-color:#2563eb; cursor:pointer; }
     .form-box button:hover { background:#1d4ed8; border-color:#1d4ed8; }
-    input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
-    input[type="number"] { -moz-appearance:textfield; }
+    input[type="number"]::-webkit-outer-spin-button, input[type="number"]::-webkit-inner-spin-button { -webkit-appearance:none; appearance:none; margin:0; }
+    input[type="number"] { -moz-appearance:textfield; appearance:textfield; }
     .checkbox-group { margin:.3em 0; }
     .checkbox-group label { display:flex; align-items:flex-start; gap:.4em; justify-self:start; font-size:.95em; }
     .checkbox-group input[type="checkbox"] { width:auto; margin-top:.15em; }
@@ -72,10 +72,10 @@
       <!-- Форма: Токарные (как у тебя) -->
       <form id="form-lathe" class="form-box">
         <select id="L-C3"><option value="">— Все типы —</option></select>
-        <input type="number" id="L-C4"  placeholder="Макс. диаметр точения" />
-        <input type="number" id="L-C5"  placeholder="Макс. длина точения" />
-        <input type="number" id="L-C6"  placeholder="Макс. скорость шпинделя" />
-        <input type="number" id="L-C7"  placeholder="Диаметр патрона" />
+        <input type="number" id="L-C4"  placeholder="Макс. диаметр точения (≥)" />
+        <input type="number" id="L-C5"  placeholder="Макс. длина точения (≥)" />
+        <input type="number" id="L-C6"  placeholder="Макс. скорость шпинделя (≥)" />
+        <input type="number" id="L-C7"  placeholder="Диаметр патрона (≥)" />
         <div class="checkbox-group"><label><input type="checkbox" id="L-C8"  /> Ось Y</label></div>
         <div class="checkbox-group"><label><input type="checkbox" id="L-C9"  /> Противошпиндель</label></div>
         <div class="checkbox-group"><label><input type="checkbox" id="L-C10" /> Приводной инструмент</label></div>
@@ -259,13 +259,19 @@ function fillSelectMilling(dataStore){
   taperSel.innerHTML='<option value="">— Конус шпинделя —</option>' + [...tapers].sort().map(v=>`<option value="${v}">${v}</option>`).join('');
 }
 
+function openDetails(id) {
+  window.open(`details.html?id=${id}`, "_blank");
+}
+
 /* Рендер таблиц */
 function renderTableLathe(items){
   if(!items.length) return '<div class="empty">Ничего не найдено</div>';
   let html=`
   <table>
     <thead>
-      <tr>
+      <tr onclick = "openDetails('${encodeURIComponent(m.header)}')">
+        <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
+        <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
         <th>Производитель</th>
         <th>Модель</th>
         <th title="Макс. диаметр точения">Ø Точения</th>
@@ -300,7 +306,9 @@ function renderTableMilling(items){
   let html=`
   <table>
     <thead>
-      <tr>
+      <tr onclick = "openDetails('${encodeURIComponent(m.header)}')">
+        <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
+        <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
         <th>Производитель</th>
         <th>Модель</th>
         <th>Тип</th>

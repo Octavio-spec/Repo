@@ -435,7 +435,7 @@ function doSearchMilling(){
     if (F.y     && it.axisY        !== -1 && it.axisY        < F.y)     continue;
     if (F.z     && it.axisZ        !== -1 && it.axisZ        < F.z)     continue;
 
-    if (F.w && !it.axisW) continue;
+    if (F.w && !(it.axisW > 0)) continue;
 
     matches.push(it);
   }

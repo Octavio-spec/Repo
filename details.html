@@ -103,42 +103,41 @@ async function main(){
   document.getElementById("title").textContent = (brand || name) ? `${brand} ${name}`.trim() : "Карточка оборудования";
   document.getElementById("meta").textContent  = tab === "milling" ? "Фрезерные" : "Токарные";
 
-  // определяем последнюю непустую строку этого столбца
+  // --- построение списка пар "подпись → значение" с пропуском пустых строк ---
+  const rows = [];
+  const start = 0; // или 1, если хочешь пропустить самую верхнюю строку
+
+  // найти последнюю строку, где в этом столбце есть подпись (A/B) или значение
   let last = matrix.length - 1;
-  while(last >= 0){
-    const label = rowText(matrix, last);
-    const val   = (matrix[last] && matrix[last][col]) ? String(matrix[last]?.[col] ?? "").trim() : "";
-    if(lbl.trim() !== ""|| val !== "") break;
+  while (last >= 0) {
+    const labelHere = rowText(matrix, last).trim();
+    const valHere = (matrix[last] && matrix[last][col]) ? String(matrix[last][col]).trim() : "";
+    if (labelHere !== "" || valHere !== "") break;
     last--;
   }
 
-  // по желанию можно начинать с 1 или с 0 — оставлю 0, но пропущу «пустые» и явные служебные
-  const start = 0; // или 1, если хочешь не включать самую верхнюю строку
-  const rows = [];
-  for(let r = start; r <= last; r++){
+  for (let r = start; r <= last; r++) {
     const label = rowText(matrix, r).trim();
-    const raw   = matrix[r]?.[col];
     const value = (matrix[r] && matrix[r][col]) ? String(matrix[r][col]).trim() : "";
 
-    // пропускаем полностью пустые строки
+    // полностью пустые — пропускаем
     if (label === "" && value === "") continue;
-
-    // пропускаем служебные (например "Титульный лист")
+    // служебные строки — пропускаем
     if (/титуль/i.test(label)) continue;
 
     rows.push({ label, value });
   }
 
-  // рендер таблицы
+  // --- рендер ---
   const kv = document.getElementById("kv");
-    let html = "";
-    for (const row of rows) {
-        html += '<tr><th>' + esc(row.label) + '</th><td>' + esc(row.value) + '</td></tr>';
-    }
-    if (html === "") {
-        html = '<tr><td colspan="2" class="muted">Нет данных</td></tr>';
-    }
-    kv.innerHTML = html;
+  let html = "";
+  for (const row of rows) {
+    html += '<tr><th>' + esc(row.label) + '</th><td>' + esc(row.value) + '</td></tr>';
+  }
+  if (html === "") {
+    html = '<tr><td colspan="2" class="muted">Нет данных</td></tr>';
+  }
+  kv.innerHTML = html;
 }
 
 function fail(msg){
@@ -147,7 +146,9 @@ function fail(msg){
   document.getElementById("title").textContent = "Ошибка";
 }
 
-main();
+main().catch(err => {
+  fail("Неожиданная ошибка: " + (err && err.message ? err.message : String(err)));
+});
 </script>
 </body>
 </html>

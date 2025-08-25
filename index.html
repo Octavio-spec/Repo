@@ -263,6 +263,16 @@ function openDetails(id) {
   window.open(`details.html?id=${id}`, "_blank");
 }
 
+function setupRowClickDelegation(){
+  const wrap = document.getElementById("results");
+  wrap.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr.res-row");
+    if (!tr) return;
+    const id = tr.dataset.id;
+    openDetails(id);
+  });
+}
+
 /* Рендер таблиц */
 function renderTableLathe(items){
   if(!items.length) return '<div class="empty">Ничего не найдено</div>';
@@ -285,8 +295,9 @@ function renderTableLathe(items){
     </thead>
     <tbody>`;
   for(const m of items){
+    
     html += `
-      <tr>
+      <tr class="res-row" data-id="${encodeURIComponent(m.header)}">
         <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
         <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
         <td>${fmt(m.v9)}</td>
@@ -306,7 +317,7 @@ function renderTableMilling(items){
   let html=`
   <table>
     <thead>
-      <tr onclick = "openDetails('${encodeURIComponent(m.header)}')">
+      <tr class="res-row" data-id="${encodeURIComponent(m.header)}">
         <td><strong>${m.brand || "<span class='muted'>—</span>"}</strong></td>
         <td class="td-name">${m.name || "<span class='muted'>—</span>"}</td>
         <th>Производитель</th>
@@ -455,6 +466,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   // Переключение вкладок + показ нужной формы
   document.querySelectorAll(".tab-btn").forEach(btn=>{
     btn.addEventListener("click", async () => {
+      setupRowClickDelegation();
       if(btn.dataset.tab === activeTab) return;
       document.querySelectorAll(".tab-btn").forEach(b=>b.classList.remove("active"));
       btn.classList.add("active");

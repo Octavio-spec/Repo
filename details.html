@@ -200,13 +200,29 @@
 
             if (!matrix.length) { fail("Таблица пуста."); return; }
 
+                        // === найти колонку по id (сначала по строке 3 с моделями, затем fallback по строке 1) ===
+            function norm(s) { return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim(); }
+
+            const idNorm = norm(id);
             const cols = matrix[0].length;
             let col = -1;
+
+            // 1) модель (строка 3 по таблице -> index 2)
             for (let j = 3; j < cols; j++) {
-                const h = String(matrix[0][j] ?? "").toLowerCase().trim();
-                if (h && h === id) { col = j; break; }
+                const cell = norm(matrix[2]?.[j]);
+                if (cell && cell === idNorm) { col = j; break; }
             }
+
+            // 2) fallback: заголовок колонки (строка 1 по таблице -> index 0)
+            if (col === -1) {
+                for (let j = 3; j < cols; j++) {
+                    const cell = norm(matrix[0]?.[j]);
+                    if (cell && cell === idNorm) { col = j; break; }
+                }
+            }
+
             if (col === -1) { fail("Модель не найдена по id: " + id); return; }
+
 
             const brand = clean(matrix[1]?.[col]);
             const name = clean(matrix[2]?.[col]) || clean(matrix[0]?.[col]);

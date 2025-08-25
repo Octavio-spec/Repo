@@ -48,6 +48,8 @@
     .empty { color:#6b7280; font-size:.95em; padding:.3em 0; }
     pre#error { white-space:pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top:10px; color:#9b1c1c; }
     pre#error-m { white-space:pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top:10px; color:#9b1c1c; }
+    .res-row { cursor: pointer; }
+    .res-row:hover { background: rgba(37,99,235,.12); }
 
     .hidden { display:none; }
 
@@ -264,14 +266,13 @@ function openDetails(id) {
   window.open(`details.html?id=${id}`, "_blank");
 }
 
-function setupRowClickDelegation(){
-  document.getElementById("results").addEventListener("click", (e) => {
+function setupRowClickDelegation() {
+  const wrap = document.getElementById("results");
+  wrap.addEventListener("click", (e) => {
     const tr = e.target.closest("tr.res-row");
-    if (!tr) return;
+    if (!tr || !wrap.contains(tr)) return;
     const id = tr.dataset.id;
-    // пока можно просто открыть details.html или показать alert
-    // window.open(`details.html?id=${id}`, "_blank");
-    console.log("row click:", id);
+    if (id) openDetails(id);
   });
 }
 
@@ -465,6 +466,7 @@ function doSearchMilling(){
 
 /* ===== Инициализация и переключение вкладок ===== */
 window.addEventListener("DOMContentLoaded", async () => {
+  setupRowClickDelegation();
   // Переключение вкладок + показ нужной формы
   document.querySelectorAll(".tab-btn").forEach(btn=>{
     btn.addEventListener("click", async () => {

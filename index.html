@@ -171,7 +171,7 @@ function parseCSV(text) {
 function matrixToRecordsLathe(m){
   const res=[], map={};
   if(!m.length) return {res,map};
-  const R = { v9:8, v10:9, v34:33, v35:35, f15:14, f17:16, toolSpeedRow:55 };
+  const R = { v9:8, v10:9, v34:33, v35:34, f15:14, f17:16, toolSpeedRow:55 };
   const cols = m[0].length;
   for (let j=3;j<cols;j++){
     const h = String(safeCell(m,0,j)).toLowerCase().trim();

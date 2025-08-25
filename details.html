@@ -116,20 +116,22 @@ async function main(){
   const start = 0; // или 1, если хочешь не включать самую верхнюю строку
   const rows = [];
   for(let r = start; r <= last; r++){
-    const label = rowText(matrix, r);
+    const label = rowText(matrix, r).trim();
     const raw   = matrix[r]?.[col];
-    const value = (raw==null || String(raw).trim()==="") ? "" : String(raw);
-    if(!hasContent(label) && !hasContent(value)) continue;
-    // пропустим строки, которые точно не нужны в карточке (например, кнопки/титульник)
-    const lLower = label.toLowerCase();
-    if(/титуль/i.test(lLower)) continue;
+    const value = raw == null ? "" : String(raw).trim();
+
+    // пропускаем полностью пустые строки
+    if(!label && !value) continue;
+
+    // пропускаем служебные (например "Титульный лист")
+    if(/титуль/i.test(label.toLowerCase())) continue;
 
     rows.push({ label, value });
   }
 
   // рендер таблицы
   const kv = document.getElementById("kv");
-  kv.innerHTML = rows.map(({label,value}) => `
+  kv.innerHTML = rows.length ? rows.map(({label,value}) => `
     <tr>
       <th>${esc(label)}</th>
       <td>${esc(value)}</td>

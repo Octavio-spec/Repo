@@ -11,7 +11,8 @@
     .muted { color:#6b7280; }
     table { width:100%; border-collapse: collapse; font-size:14px; }
     th, td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
-    th { width:40%; background:#f9fafb; }
+    thead th { background:#f3f4f6; }
+    th { width:42%; }
     .toolbar { margin-bottom:10px; display:flex; gap:8px; align-items:center; }
     .back { text-decoration:none; font-weight:600; color:#2563eb; }
     pre#error { white-space:pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top:10px; color:#9b1c1c; }
@@ -31,12 +32,20 @@
   </div>
 
 <script>
+'use strict';
+
 /* ===== Конфиги листов ===== */
 const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
 const GIDS = { lathe: "1008569495", milling: "361418967" };
 const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}&_=${Date.now()}`;
 
-function esc(s){ return String(s ?? "").replace(/[&<>"']/g, m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+/* ===== Утилиты ===== */
+const qs = new URLSearchParams(location.search);
+const id  = decodeURIComponent(qs.get("id") || "").toLowerCase().trim(); // header ключ
+const tab = (qs.get("tab") || "lathe").toLowerCase();
+const gid = GIDS[tab] || GIDS.lathe;
+
+function esc(s){ return String(s ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
 function clean(s){ return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
 function hasValue(v){
   const s = clean(v);
@@ -46,59 +55,47 @@ function hasValue(v){
   return true;
 }
 
-/* ===== Утилиты ===== */
-const qs = new URLSearchParams(location.search);
-const id  = decodeURIComponent(qs.get("id") || "").toLowerCase().trim(); // header ключ, который мы передаём из таблицы
-const tab = (qs.get("tab") || "lathe").toLowerCase();
-const gid = GIDS[tab] || GIDS.lathe;
-
-function esc(s){ return String(s ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function toNumberStrict(v){ if(v==null) return null; const s=String(v).trim().replace(',','.'); const m=s.match(/[+-]?\d+(\.\d+)?/); return m?parseFloat(m[0]):null; }
-function hasContent(v){ if(v==null) return false; const s=String(v).trim(); return s.length>0; }
-
+// CSV-парсер с кавычками
 function parseCSV(text) {
-  const rows=[]; let row=[], cur='', q=false;
+  const rows=[]; let row=[], cur='', quoted=false;
   for (let i=0;i<text.length;i++){
     const ch=text[i], next=text[i+1];
-    if(q){
-      if(ch==='"' && next === '"'){ cur+='"'; i++; }
-      else if(ch === '"'){ q=false; }
+    if (quoted){
+      if (ch==='"' && next === '"'){ cur+='"'; i++; }
+      else if (ch === '"'){ quoted=false; }
       else { cur+=ch; }
-    }else{
-      if(ch === '"') q=true;
-      else if(ch === ','){ row.push(cur); cur=''; }
-      else if(ch === '\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
-      else if(ch === '\r'){ /* skip */ }
+    } else {
+      if (ch === '"') quoted=true;
+      else if (ch === ','){ row.push(cur); cur=''; }
+      else if (ch === '\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else if (ch === '\r'){ /* skip */ }
       else { cur+=ch; }
     }
   }
-  if(cur.length || row.length){ row.push(cur); rows.push(row); }
+  if (cur.length || row.length){ row.push(cur); rows.push(row); }
   return rows;
 }
 
-function rowText(m,r){
-  const a = String(m[r]?.[0] ?? "").trim();
-  const b = String(m[r]?.[1] ?? "").trim();
-  return a || b; // подпись берём из колонки A или B
-}
+// подпись параметра берём из A; единица измерения — из B
+function labelAt(matrix, row){ return clean(matrix[row]?.[0]); }
+function unitAt (matrix, row){ return clean(matrix[row]?.[1]); }
 
+/* Собираем строки Параметр | Значение | Ед. изм. */
 function buildRows(matrix, col){
-  const rows = [];
-
   // найти последнюю «содержательную» строку
   let last = matrix.length - 1;
   while (last >= 0) {
-    const a = clean(matrix[last]?.[0]);   // колонка A — параметр
-    const b = clean(matrix[last]?.[1]);   // колонка B — ед. изм.
-    const v = clean(matrix[last]?.[col]); // значение
+    const a = labelAt(matrix, last);
+    const b = unitAt(matrix, last);
+    const v = clean(matrix[last]?.[col]);
     if (a || b || hasValue(v)) break;
     last--;
   }
 
-  // собрать строки Параметр|Значение|Ед.изм.
+  const rows = [];
   for (let i = 0; i <= last; i++) {
-    const label = clean(matrix[i]?.[0]);   // A
-    const unit  = clean(matrix[i]?.[1]);   // B
+    const label = labelAt(matrix, i);     // A
+    const unit  = unitAt (matrix, i);     // B
     const value = clean(matrix[i]?.[col]); // значение
 
     if (!hasValue(value)) continue;        // пропустить пустые/«—»/«нет»
@@ -109,23 +106,32 @@ function buildRows(matrix, col){
   return rows;
 }
 
-/* ===== Загрузка и отрисовка ===== */
+function fail(msg){
+  const box = document.getElementById("error");
+  box.textContent = msg;
+  box.style.display = "block";
+  document.getElementById("title").textContent = "Ошибка";
+}
+
+/* ===== Основной поток ===== */
 async function main(){
   if(!id){ fail("Не передан параметр id."); return; }
 
+  // грузим CSV
   let matrix;
   try{
-    const r = await fetch(csvUrl(gid));
-    if(!r.ok) throw new Error(`CSV HTTP ${r.status}`);
-    matrix = parseCSV(await r.text());
+    const resp = await fetch(csvUrl(gid));
+    if(!resp.ok) throw new Error(`CSV HTTP ${resp.status}`);
+    const text = await resp.text();
+    matrix = parseCSV(text);
   }catch(e){
-    fail("Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + e.message);
+    fail("Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + (e && e.message ? e.message : e));
     return;
   }
 
   if(!matrix.length){ fail("Таблица пуста."); return; }
 
-  // ищем столбец по header (строка 0)
+  // ищем столбец модели по header в строке 0
   const cols = matrix[0].length;
   let col = -1;
   for(let j=3;j<cols;j++){
@@ -134,40 +140,16 @@ async function main(){
   }
   if(col === -1){ fail("Модель не найдена по id: " + id); return; }
 
-  // заголовок (бренд/модель как в твоей структуре)
-  const brand = String(matrix[1]?.[col] ?? "").trim();
-  const name  = String(matrix[2]?.[col] ?? "").trim() || String(matrix[0]?.[col] ?? "").trim();
+  // заголовок
+  const brand = clean(matrix[1]?.[col]);
+  const name  = clean(matrix[2]?.[col]) || clean(matrix[0]?.[col]);
   document.getElementById("title").textContent = (brand || name) ? `${brand} ${name}`.trim() : "Карточка оборудования";
   document.getElementById("meta").textContent  = tab === "milling" ? "Фрезерные" : "Токарные";
 
-  // --- построение списка пар "подпись → значение" с пропуском пустых строк ---
+  // строки параметров
   const rows = buildRows(matrix, col);
-  const start = 0; // или 1, если хочешь пропустить самую верхнюю строку
 
-  // найти последнюю строку, где в этом столбце есть подпись (A/B) или значение
-  let last = matrix.length - 1;
-  while (last >= 0) {
-    const labelHere = clean(rowText(matrix, last)); // колонка А - параметр
-     const unit    = clean(matrix[r]?.[1]);  // колонка B — единица измерения
-    const valHere   = clean(matrix[last]?.[col]); // сами данные
-    if (labelHere !== "" || hasValue(valHere)) break;  // учитываем «смысловую» пустоту
-    lasst--;
-  }
-
-  for (let r = start; r <= last; r++) {
-    const label = clean(rowText(matrix, r));
-    const value = clean(matrix[r]?.[col]);
-
-    // пропускаем, если НЕТ значения (пусто / тире / "нет" / N/A)
-    if (!hasValue(value)) continue;
-    // служебные строки — пропускаем
-    if (/титуль/i.test(label)) continue;
-
-    rows.push({ label, value });
-  }
-
-  // --- рендер ---
-  const kv = document.getElementById("kv");
+  // рендер с thead и жирным значением
   let html = `
     <thead>
       <tr>
@@ -188,32 +170,25 @@ async function main(){
     `;
   }
   html += "</tbody>";
+
   if (rows.length === 0) {
-  html = `
-    <thead>
-      <tr>
-        <th>Параметр</th>
-        <th>Значение</th>
-        <th>Ед. изм.</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr><td colspan="3" class="muted">Нет данных</td></tr>
-    </tbody>`;
+    html = `
+      <thead>
+        <tr>
+          <th>Параметр</th>
+          <th>Значение</th>
+          <th>Ед. изм.</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="3" class="muted">Нет данных</td></tr>
+      </tbody>`;
   }
+
   document.getElementById("kv").innerHTML = html;
-  if (html === "") {
-    html = '<tr><td colspan="2" class="muted">Нет данных</td></tr>';
-  }
-  kv.innerHTML = html;
 }
 
-function fail(msg){
-  document.getElementById("error").textContent = msg;
-  document.getElementById("error").style.display = "block";
-  document.getElementById("title").textContent = "Ошибка";
-}
-
+// безопасный вызов
 main().catch(err => {
   fail("Неожиданная ошибка: " + (err && err.message ? err.message : String(err)));
 });

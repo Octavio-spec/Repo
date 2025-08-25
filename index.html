@@ -200,17 +200,17 @@ function matrixToRecordsMilling(m){
   const res=[], map={};
   if(!m.length) return {res,map};
   const R = {
-    type: 1,      // C3
-    len: 8,       // C4
-    width: 9,     // C5
-    spindleSpeed: 43, // C6
-    powerConst: 44,   // C7
-    powerMax: 45,     // C8
-    axisX: 18,    // C9
-    axisY: 19,    // C10
-    axisZ: 20,    // C11
-    taper: 47,    // C12
-    axisW: 21     // C13 (чекбокс)
+    type: 0,          // C3 = 1  -> индекс 0
+    len: 7,           // C4 = 8  -> 7
+    width: 8,         // C5 = 9  -> 8
+    spindleSpeed: 42, // C6 = 43 -> 42
+    powerConst: 43,   // C7 = 44 -> 43
+    powerMax: 44,     // C8 = 45 -> 44
+    axisX: 17,        // C9 = 18 -> 17
+    axisY: 18,        // C10 = 19 -> 18
+    axisZ: 19,        // C11 = 20 -> 19
+    taper: 46,        // C12 = 47 -> 46
+    axisW: 20         // C13 = 21 -> 20
   };
   const cols = m[0].length;
   for (let j=3;j<cols;j++){
@@ -232,7 +232,7 @@ function matrixToRecordsMilling(m){
       axisY: num(safeCell(m,R.axisY,j)),
       axisZ: num(safeCell(m,R.axisZ,j)),
       taper: String(safeCell(m,R.taper,j)).trim(),
-      axisW: boolStrict(safeCell(m,R.axisW,j))
+      axisW: num(safeCell(m,R.axisW,j))
     };
     res.push(item);
     (map[h]=map[h]||[]).push(item);
@@ -243,7 +243,7 @@ function matrixToRecordsMilling(m){
 /* Селекты: токарные = по заголовкам; фрезерные = по значениям type/taper */
 function fillSelectLathe(headerMap){
   const sel=document.getElementById("L-C3");
-  sel.innerHTML='<option value="">— Все типы —</option>';
+  sel.innerHTML='<option value="">— Тип станка —</option>';
   Object.keys(headerMap).sort().forEach(key=>{
     const opt=document.createElement("option");
     opt.value=key; opt.textContent=key.charAt(0).toUpperCase()+key.slice(1);
@@ -255,8 +255,8 @@ function fillSelectMilling(dataStore){
   const taperSel=document.getElementById("M-C12");
   const types=new Set(), tapers=new Set();
   dataStore.forEach(it=>{ if(it.type) types.add(it.type); if(it.taper) tapers.add(it.taper); });
-  typeSel.innerHTML='<option value="">— Все типы станков —</option>' + [...types].sort().map(v=>`<option value="${v}">${v}</option>`).join('');
-  taperSel.innerHTML='<option value="">— Любой конус шпинделя —</option>' + [...tapers].sort().map(v=>`<option value="${v}">${v}</option>`).join('');
+  typeSel.innerHTML='<option value="">— Тип станка —</option>' + [...types].sort().map(v=>`<option value="${v}">${v}</option>`).join('');
+  taperSel.innerHTML='<option value="">— Конус шпинделя —</option>' + [...tapers].sort().map(v=>`<option value="${v}">${v}</option>`).join('');
 }
 
 /* Рендер таблиц */
@@ -332,7 +332,7 @@ function renderTableMilling(items){
         <td>${fmt(m.axisY)}</td>
         <td>${fmt(m.axisZ)}</td>
         <td>${fmt(m.taper)}</td>
-        <td class="td-flag">${m.axisW ? check : cross}</td>
+        <td>${fmt(m.axisW)}</td>
       </tr>`;
   }
   html += `</tbody></table>`;

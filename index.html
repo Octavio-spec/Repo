@@ -197,7 +197,7 @@
       cursor: pointer;
     }
 
-    /* Сообщения об ошибке для обеих форм */
+    /* Ошибки */
     pre#error,
     pre#error-m {
       white-space: pre-wrap;
@@ -286,35 +286,99 @@
 
   <script>
     'use strict';
+
     /* ===== Конфиг листов ===== */
-    const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
+    const SPREADSHEET_ID = '1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC';
     const TABS = {
-      lathe: { gid: "1008569495" },
-      milling: { gid: "361418967" }
+      lathe: { gid: '1008569495' },
+      milling: { gid: '361418967' }
     };
-    const sheetCSV = ({ sheetId, gid }) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
+    const sheetCSV = ({ sheetId, gid }) => (
+      `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`
+    );
 
     /* ===== Состояние ===== */
-    const datasets = { lathe: { dataStore: [], headerMap: {}, loaded: false }, milling: { dataStore: [], headerMap: {}, loaded: false } };
+    const datasets = {
+      lathe: { dataStore: [], headerMap: {}, loaded: false },
+      milling: { dataStore: [], headerMap: {}, loaded: false }
+    };
     let activeTab = 'lathe';
 
     /* ===== Утилиты ===== */
     const check = '✓', cross = '—';
     const fmt = v => (v === -1 || v === '' || v == null ? '—' : v);
-    function toNumberStrict(v) { if (v == null) return null; const s = String(v).trim().replace(',', '.'); if (!/^[+-]?\d+(\.\d+)?$/.test(s)) return null; return parseFloat(s); }
+    function toNumberStrict(v) {
+      if (v == null) return null;
+      const s = String(v).trim().replace(',', '.');
+      if (!/^[+-]?\d+(?:\.\d+)?$/.test(s)) return null;
+      return parseFloat(s);
+    }
     function num(v) { const n = toNumberStrict(v); return n === null ? -1 : n; }
-    function boolStrict(v) { if (v == null) return false; const n = toNumberStrict(v); if (n !== null) return n > 0; const s = String(v).trim().toLowerCase(); return ["да", "yes", "true", "есть", "y", "1"].includes(s); }
-    const safeCell = (m, r, c) => (m[r] && m[r][c] !== undefined) ? m[r][c] : "";
+    function boolStrict(v) {
+      if (v == null) return false;
+      const n = toNumberStrict(v); if (n !== null) return n > 0;
+      const s = String(v).trim().toLowerCase();
+      return ['да', 'yes', 'true', 'есть', 'y', '1'].includes(s);
+    }
+    const safeCell = (m, r, c) => (m[r] && m[r][c] !== undefined) ? m[r][c] : '';
     function showErr(id, msg) { const b = document.getElementById(id); b.textContent = msg; b.style.display = 'block'; }
 
-    /* CSV-парсер с кавычками */
-    function parseCSV(text) { const rows = []; let row = [], cur = '', q = false; for (let i = 0; i < text.length; i++) { const ch = text[i], n = text[i + 1]; if (q) { if (ch === '"' && n === '"') { cur += '"'; i++; } else if (ch === '"') { q = false; } else { cur += ch; } } else { if (ch === '"') q = true; else if (ch === ',') { row.push(cur); cur = ''; } else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; } else if (ch === '\r') { } else { cur += ch; } } } if (cur.length || row.length) { row.push(cur); rows.push(row); } return rows.filter(r => r.length && !(r.length === 1 && r[0] === '')); }
+    /* CSV-парсер c поддержкой кавычек/запятых */
+    function parseCSV(text) {
+      const rows = []; let row = [], cur = '', q = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i], n = text[i + 1];
+        if (q) {
+          if (ch === '"' && n === '"') { cur += '"'; i++; }
+          else if (ch === '"') { q = false; }
+          else { cur += ch; }
+        } else {
+          if (ch === '"') q = true;
+          else if (ch === ',') { row.push(cur); cur = ''; }
+          else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+          else if (ch === '\r') { /* skip */ }
+          else { cur += ch; }
+        }
+      }
+      if (cur.length || row.length) { row.push(cur); rows.push(row); }
+      return rows.filter(r => r.length && !(r.length === 1 && r[0] === ''));
+    }
 
-    /* ===== Поиск строк для токарных (автодетект) ===== */
-    function rowText(m, r) { const c0 = String(m[r]?.[0] ?? '').trim().toLowerCase(); const c1 = String(m[r]?.[1] ?? '').trim().toLowerCase(); return c0 || c1; }
-    function findRowIndexAdvanced(m, inc, exc = null, maxScan = 160) { for (let r = 0; r < Math.min(maxScan, m.length); r++) { const t = rowText(m, r); if (!t) continue; if (inc.test(t) && (!exc || !exc.test(t))) return r; } return -1; }
-    function rowScore(m, r, checkBool = false, maxCols = 20) { if (r < 0 || r >= m.length) return -1; const cols = Math.min(m[0]?.length || 0, 3 + maxCols); let s = 0; for (let j = 3; j < cols; j++) { const v = m[r]?.[j]; if (checkBool) { const n = toNumberStrict(v); if (n !== null && n > 0) { s++; continue; } const ss = String(v || '').trim().toLowerCase(); if (/(^|\b)(да|yes|true|есть|y|1)\b/.test(ss)) s++; } else { if (toNumberStrict(v) !== null) s++; } } return s; }
-    function adjustRowIfNeeded(m, r, checkBool = false) { if (r < 0) return r; const s0 = rowScore(m, r, checkBool), s1 = rowScore(m, r + 1, checkBool); return (s1 > s0) ? r + 1 : r; }
+    /* ===== Автодетект строк для токарных ===== */
+    function rowText(m, r) {
+      const c0 = String(m[r]?.[0] ?? '').trim().toLowerCase();
+      const c1 = String(m[r]?.[1] ?? '').trim().toLowerCase();
+      return c0 || c1;
+    }
+    function findRowIndexAdvanced(m, inc, exc = null, maxScan = 160) {
+      for (let r = 0; r < Math.min(maxScan, m.length); r++) {
+        const t = rowText(m, r);
+        if (!t) continue;
+        if (inc.test(t) && (!exc || !exc.test(t))) return r;
+      }
+      return -1;
+    }
+    function rowScore(m, r, checkBool = false, maxCols = 20) {
+      if (r < 0 || r >= m.length) return -1;
+      const cols = Math.min(m[0]?.length || 0, 3 + maxCols); let s = 0;
+      for (let j = 3; j < cols; j++) {
+        const v = m[r]?.[j];
+        if (checkBool) {
+          const n = toNumberStrict(v);
+          if (n !== null && n > 0) { s++; continue; }
+          const ss = String(v || '').trim().toLowerCase();
+          if (/(^|\b)(да|yes|true|есть|y|1)\b/.test(ss)) s++;
+        } else {
+          if (toNumberStrict(v) !== null) s++;
+        }
+      }
+      return s;
+    }
+    function adjustRowIfNeeded(m, r, checkBool = false) {
+      if (r < 0) return r;
+      const s0 = rowScore(m, r, checkBool), s1 = rowScore(m, r + 1, checkBool);
+      return (s1 > s0) ? r + 1 : r;
+    }
     function detectRowPositionsLathe(m) {
       let r_v9 = findRowIndexAdvanced(m, /максимал.*диаметр.*точен/i);
       let r_v10 = findRowIndexAdvanced(m, /максимал.*длина.*(точен|заготовк)/i);
@@ -332,7 +396,15 @@
       r_f17 = adjustRowIfNeeded(m, r_f17, true);
       r_tool = adjustRowIfNeeded(m, r_tool, false);
 
-      return { v9: r_v9 !== -1 ? r_v9 : 8, v10: r_v10 !== -1 ? r_v10 : 9, v34: r_v34 !== -1 ? r_v34 : 33, v35: r_v35 !== -1 ? r_v35 : 35, f15: r_f15 !== -1 ? r_f15 : 14, f17: r_f17 !== -1 ? r_f17 : 16, toolSpeedRow: r_tool !== -1 ? r_tool : 55 };
+      return {
+        v9: r_v9 !== -1 ? r_v9 : 8,
+        v10: r_v10 !== -1 ? r_v10 : 9,
+        v34: r_v34 !== -1 ? r_v34 : 33,
+        v35: r_v35 !== -1 ? r_v35 : 35,
+        f15: r_f15 !== -1 ? r_f15 : 14,
+        f17: r_f17 !== -1 ? r_f17 : 16,
+        toolSpeedRow: r_tool !== -1 ? r_tool : 55
+      };
     }
 
     /* ===== Преобразование данных ===== */
@@ -341,105 +413,318 @@
       const R = detectRowPositionsLathe(m);
       const cols = m[0].length;
       for (let j = 3; j < cols; j++) {
-        const headerRaw = String(safeCell(m, 2, j)).trim(); // заголовок колонки
-        const id = headerRaw.toLowerCase();
+        // id и name берём из строки 3 таблицы (index 2) — это модель
+        const modelRaw = String(safeCell(m, 2, j)).trim();
+        const id = modelRaw.toLowerCase();
         if (!id) continue;
-        let name = String(safeCell(m, 2, j)).trim();
-        if (!name || name.startsWith('#')) name = headerRaw;
+
+        const name = modelRaw;
         const brand = String(safeCell(m, 1, j)).trim();
+
         const item = {
-          id, header: headerRaw, name, brand,
-          v9: num(safeCell(m, R.v9, j)), v10: num(safeCell(m, R.v10, j)), v34: num(safeCell(m, R.v34, j)), v35: num(safeCell(m, R.v35, j)),
-          f15: boolStrict(safeCell(m, R.f15, j)), f17: boolStrict(safeCell(m, R.f17, j)), f56: (num(safeCell(m, R.toolSpeedRow, j)) > 0)
+          id,
+          header: modelRaw,
+          name,
+          brand,
+          v9: num(safeCell(m, R.v9, j)),
+          v10: num(safeCell(m, R.v10, j)),
+          v34: num(safeCell(m, R.v34, j)),
+          v35: num(safeCell(m, R.v35, j)),
+          f15: boolStrict(safeCell(m, R.f15, j)),
+          f17: boolStrict(safeCell(m, R.f17, j)),
+          f56: (num(safeCell(m, R.toolSpeedRow, j)) > 0)
         };
-        res.push(item); (map[id] = map[id] || []).push(item);
+        res.push(item);
+        (map[id] = map[id] || []).push(item);
       }
       return { res, map };
     }
 
     function matrixToRecordsMilling(m) {
       const res = [], map = {}; if (!m.length) return { res, map };
-      // твоя карта строк (1-based -> 0-based уже учтены):
-      const R = { type: 2, len: 9, width: 10, spindleSpeed: 44, powerConst: 45, powerMax: 46, axisX: 19, axisY: 20, axisZ: 21, taper: 48, axisW: 22 };
+      // Карта строк (0-based индексы):
+      const R = {
+        type: 2,
+        len: 9,
+        width: 10,
+        spindleSpeed: 44,
+        powerConst: 45,
+        powerMax: 46,
+        axisX: 19,
+        axisY: 20,
+        axisZ: 21,
+        taper: 48,
+        axisW: 22
+      };
       const cols = m[0].length;
       for (let j = 3; j < cols; j++) {
-        const headerRaw = String(safeCell(m, 2, j)).trim();
-        const id = headerRaw.toLowerCase();
+        const modelRaw = String(safeCell(m, 2, j)).trim(); // модель = строка 3
+        const id = modelRaw.toLowerCase();
         if (!id) continue;
-        let name = String(safeCell(m, 2, j)).trim(); if (!name || name.startsWith('#')) name = headerRaw;
+
+        const name = modelRaw;
         const brand = String(safeCell(m, 1, j)).trim();
+
         const item = {
-          id, header: headerRaw, name, brand,
-          type: String(safeCell(m, R.type, j)).trim(), len: num(safeCell(m, R.len, j)), width: num(safeCell(m, R.width, j)),
-          spindleSpeed: num(safeCell(m, R.spindleSpeed, j)), powerConst: num(safeCell(m, R.powerConst, j)), powerMax: num(safeCell(m, R.powerMax, j)),
-          axisX: num(safeCell(m, R.axisX, j)), axisY: num(safeCell(m, R.axisY, j)), axisZ: num(safeCell(m, R.axisZ, j)),
-          taper: String(safeCell(m, R.taper, j)).trim(), axisW: num(safeCell(m, R.axisW, j))
+          id,
+          header: modelRaw,
+          name,
+          brand,
+          type: String(safeCell(m, R.type, j)).trim(),
+          len: num(safeCell(m, R.len, j)),
+          width: num(safeCell(m, R.width, j)),
+          spindleSpeed: num(safeCell(m, R.spindleSpeed, j)),
+          powerConst: num(safeCell(m, R.powerConst, j)),
+          powerMax: num(safeCell(m, R.powerMax, j)),
+          axisX: num(safeCell(m, R.axisX, j)),
+          axisY: num(safeCell(m, R.axisY, j)),
+          axisZ: num(safeCell(m, R.axisZ, j)),
+          taper: String(safeCell(m, R.taper, j)).trim(),
+          axisW: num(safeCell(m, R.axisW, j))
         };
-        res.push(item); (map[id] = map[id] || []).push(item);
+        res.push(item);
+        (map[id] = map[id] || []).push(item);
       }
       return { res, map };
     }
 
     /* ===== Селекты ===== */
-    function fillSelectLathe(headerMap) { const sel = document.getElementById('L-C3'); sel.innerHTML = '<option value="">— Все типы —</option>'; Object.keys(headerMap).sort().forEach(key => { const opt = document.createElement('option'); opt.value = key; opt.textContent = key.charAt(0).toUpperCase() + key.slice(1); sel.appendChild(opt); }); }
-    function fillSelectMilling(dataStore) { const tSel = document.getElementById('M-C3'); const taperSel = document.getElementById('M-C12'); const types = new Set(), tapers = new Set(); dataStore.forEach(it => { if (it.type) types.add(it.type); if (it.taper) tapers.add(it.taper); }); tSel.innerHTML = '<option value="">— Все типы станков —</option>' + [...types].sort().map(v => `<option value="${v}">${v}</option>`).join(''); taperSel.innerHTML = '<option value="">— Любой конус шпинделя —</option>' + [...tapers].sort().map(v => `<option value="${v}">${v}</option>`).join(''); }
-
-    /* ===== Рендер таблиц ===== */
-    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m])); }
-    function renderTableLathe(items) {
-      if (!items || !items.length) return '<div class="empty">Ничего не найдено</div>'; const rows = items.map(it => `
-  <tr class="res-row" data-id="${it.id}">
-    <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
-    <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
-    <td>${fmt(it.v9)}</td>
-    <td>${fmt(it.v10)}</td>
-    <td>${fmt(it.v34)}</td>
-    <td>${fmt(it.v35)}</td>
-    <td class="td-flag">${it.f15 ? check : cross}</td>
-    <td class="td-flag">${it.f17 ? check : cross}</td>
-    <td class="td-flag">${it.f56 ? check : cross}</td>
-  </tr>`).join('');
-      return `<table><thead><tr><th>Производитель</th><th>Модель</th><th title="Макс. диаметр точения">Ø Точения</th><th title="Макс. длина точения">Длина</th><th title="Макс. скорость шпинделя">Скорость шпинделя</th><th title="Диаметр патрона">Патрон</th><th class="td-flag">Ось Y</th><th class="td-flag">Противошп.</th><th class="td-flag">Привод.инстр.</th></tr></thead><tbody>${rows}</tbody></table>`;
+    function fillSelectLathe(headerMap) {
+      const sel = document.getElementById('L-C3');
+      sel.innerHTML = '<option value="">— Все типы —</option>';
+      Object.keys(headerMap).sort().forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = key.charAt(0).toUpperCase() + key.slice(1);
+        sel.appendChild(opt);
+      });
+    }
+    function fillSelectMilling(dataStore) {
+      const tSel = document.getElementById('M-C3');
+      const taperSel = document.getElementById('M-C12');
+      const types = new Set(), tapers = new Set();
+      dataStore.forEach(it => {
+        if (it.type) types.add(it.type);
+        if (it.taper) tapers.add(it.taper);
+      });
+      tSel.innerHTML = '<option value="">— Все типы станков —</option>' +
+        [...types].sort().map(v => `<option value="${v}">${v}</option>`).join('');
+      taperSel.innerHTML = '<option value="">— Любой конус шпинделя —</option>' +
+        [...tapers].sort().map(v => `<option value="${v}">${v}</option>`).join('');
     }
 
+    /* ===== Рендер таблиц ===== */
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+    function renderTableLathe(items) {
+      if (!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
+      const rows = items.map(it => `
+      <tr class="res-row" data-id="${it.id}">
+        <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
+        <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+        <td>${fmt(it.v9)}</td>
+        <td>${fmt(it.v10)}</td>
+        <td>${fmt(it.v34)}</td>
+        <td>${fmt(it.v35)}</td>
+        <td class="td-flag">${it.f15 ? check : cross}</td>
+        <td class="td-flag">${it.f17 ? check : cross}</td>
+        <td class="td-flag">${it.f56 ? check : cross}</td>
+      </tr>
+    `).join('');
+      return `
+      <table>
+        <thead>
+          <tr>
+            <th>Производитель</th>
+            <th>Модель</th>
+            <th title="Макс. диаметр точения">Ø Точения</th>
+            <th title="Макс. длина точения">Длина</th>
+            <th title="Макс. скорость шпинделя">Скорость шпинделя</th>
+            <th title="Диаметр патрона">Патрон</th>
+            <th class="td-flag">Ось Y</th>
+            <th class="td-flag">Противошп.</th>
+            <th class="td-flag">Привод.инстр.</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    }
     function renderTableMilling(items) {
-      if (!items || !items.length) return '<div class="empty">Ничего не найдено</div>'; const rows = items.map(it => `
-  <tr class="res-row" data-id="${it.id}">
-    <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
-    <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
-    <td>${fmt(it.type)}</td>
-    <td>${fmt(it.len)}</td>
-    <td>${fmt(it.width)}</td>
-    <td>${fmt(it.spindleSpeed)}</td>
-    <td>${fmt(it.powerConst)}</td>
-    <td>${fmt(it.powerMax)}</td>
-    <td>${fmt(it.axisX)}</td>
-    <td>${fmt(it.axisY)}</td>
-    <td>${fmt(it.axisZ)}</td>
-    <td>${fmt(it.taper)}</td>
-    <td>${fmt(it.axisW)}</td>
-  </tr>`).join('');
-      return `<table><thead><tr><th>Производитель</th><th>Модель</th><th>Тип</th><th>Длина стола</th><th>Ширина стола</th><th>Скорость шпинделя</th><th>Мощн. пост.</th><th>Мощн. макс.</th><th>Ход X</th><th>Ход Y</th><th>Ход Z</th><th>Конус</th><th>Ось W</th></tr></thead><tbody>${rows}</tbody></table>`;
+      if (!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
+      const rows = items.map(it => `
+      <tr class="res-row" data-id="${it.id}">
+        <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
+        <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+        <td>${fmt(it.type)}</td>
+        <td>${fmt(it.len)}</td>
+        <td>${fmt(it.width)}</td>
+        <td>${fmt(it.spindleSpeed)}</td>
+        <td>${fmt(it.powerConst)}</td>
+        <td>${fmt(it.powerMax)}</td>
+        <td>${fmt(it.axisX)}</td>
+        <td>${fmt(it.axisY)}</td>
+        <td>${fmt(it.axisZ)}</td>
+        <td>${fmt(it.taper)}</td>
+        <td>${fmt(it.axisW)}</td>
+      </tr>
+    `).join('');
+      return `
+      <table>
+        <thead>
+          <tr>
+            <th>Производитель</th>
+            <th>Модель</th>
+            <th>Тип</th>
+            <th>Длина стола</th>
+            <th>Ширина стола</th>
+            <th>Скорость шпинделя</th>
+            <th>Мощн. пост.</th>
+            <th>Мощн. макс.</th>
+            <th>Ход X</th>
+            <th>Ход Y</th>
+            <th>Ход Z</th>
+            <th>Конус</th>
+            <th>Ось W</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
     }
 
     /* ===== Загрузка по вкладкам ===== */
-    async function loadTabData(tabKey) { const tab = TABS[tabKey]; const state = datasets[tabKey]; const loading = document.getElementById('loading'); loading.style.display = 'block'; try { if (!state.loaded) { const r = await fetch(sheetCSV({ sheetId: SPREADSHEET_ID, gid: tab.gid }) + `&_=${Date.now()}`); if (!r.ok) throw new Error(`CSV HTTP ${r.status}`); const matrix = parseCSV(await r.text()); const parsed = (tabKey === 'lathe') ? matrixToRecordsLathe(matrix) : matrixToRecordsMilling(matrix); state.dataStore = parsed.res; state.headerMap = parsed.map; state.loaded = true; } if (tabKey === 'lathe') fillSelectLathe(state.headerMap); else fillSelectMilling(state.dataStore); document.getElementById('results').innerHTML = ''; } catch (e) { const errId = (tabKey === 'lathe') ? 'error' : 'error-m'; showErr(errId, "Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + (e && e.message ? e.message : e)); } finally { loading.style.display = 'none'; } }
+    async function loadTabData(tabKey) {
+      const tab = TABS[tabKey];
+      const state = datasets[tabKey];
+      const loading = document.getElementById('loading');
+      loading.style.display = 'block';
+      try {
+        if (!state.loaded) {
+          const r = await fetch(sheetCSV({ sheetId: SPREADSHEET_ID, gid: tab.gid }) + `&_=${Date.now()}`);
+          if (!r.ok) throw new Error(`CSV HTTP ${r.status}`);
+          const matrix = parseCSV(await r.text());
+          const parsed = (tabKey === 'lathe') ? matrixToRecordsLathe(matrix)
+            : matrixToRecordsMilling(matrix);
+          state.dataStore = parsed.res;
+          state.headerMap = parsed.map;
+          state.loaded = true;
+        }
+        if (tabKey === 'lathe') fillSelectLathe(state.headerMap);
+        else fillSelectMilling(state.dataStore);
+        document.getElementById('results').innerHTML = '';
+      } catch (e) {
+        const errId = (tabKey === 'lathe') ? 'error' : 'error-m';
+        showErr(errId, 'Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n' + (e && e.message ? e.message : e));
+      } finally {
+        loading.style.display = 'none';
+      }
+    }
 
     /* ===== Поиск ===== */
-    function doSearchLathe() { const { dataStore, headerMap } = datasets.lathe; if (!dataStore.length) { alert('Данные ещё загружаются…'); return; } const C3 = document.getElementById('L-C3').value; const C4 = +document.getElementById('L-C4').value || 0; const C5 = +document.getElementById('L-C5').value || 0; const C6 = +document.getElementById('L-C6').value || 0; const C7 = +document.getElementById('L-C7').value || 0; const C8 = document.getElementById('L-C8').checked; const C9 = document.getElementById('L-C9').checked; const C10 = document.getElementById('L-C10').checked; const cand = (C3 && headerMap[C3]) ? headerMap[C3] : dataStore; const matches = []; for (const item of cand) { if (!item.name) continue; if (C4 && item.v9 !== -1 && (C4 > item.v9 || (C4 + 100) < item.v9)) continue; if (C5 && item.v10 !== -1 && (C5 > item.v10 || (C5 + C5 * 1.5) < item.v10)) continue; if (C6 && item.v34 !== -1 && C6 > item.v34) continue; if (C7 && item.v35 !== -1 && item.v35 < C7) continue; if (C8 && !item.f15) continue; if (C9 && !item.f17) continue; if (C10 && !item.f56) continue; matches.push(item); } document.getElementById('results').innerHTML = renderTableLathe(matches); }
+    function doSearchLathe() {
+      const { dataStore, headerMap } = datasets.lathe;
+      if (!dataStore.length) { alert('Данные ещё загружаются…'); return; }
 
-    function doSearchMilling() { const { dataStore } = datasets.milling; if (!dataStore.length) { alert('Данные ещё загружаются…'); return; } const F = { type: document.getElementById('M-C3').value.trim(), len: +document.getElementById('M-C4').value || 0, width: +document.getElementById('M-C5').value || 0, spin: +document.getElementById('M-C6').value || 0, pConst: +document.getElementById('M-C7').value || 0, pMax: +document.getElementById('M-C8').value || 0, x: +document.getElementById('M-C9').value || 0, y: +document.getElementById('M-C10').value || 0, z: +document.getElementById('M-C11').value || 0, taper: document.getElementById('M-C12').value.trim(), w: document.getElementById('M-C13').checked }; const matches = []; for (const it of dataStore) { if (!it.name) continue; if (F.type && String(it.type).trim() !== F.type) continue; if (F.taper && String(it.taper).trim() !== F.taper) continue; if (F.len && it.len !== -1 && it.len < F.len) continue; if (F.width && it.width !== -1 && it.width < F.width) continue; if (F.spin && it.spindleSpeed !== -1 && it.spindleSpeed < F.spin) continue; if (F.pConst && it.powerConst !== -1 && it.powerConst < F.pConst) continue; if (F.pMax && it.powerMax !== -1 && it.powerMax < F.pMax) continue; if (F.x && it.axisX !== -1 && it.axisX < F.x) continue; if (F.y && it.axisY !== -1 && it.axisY < F.y) continue; if (F.z && it.axisZ !== -1 && it.axisZ < F.z) continue; if (F.w && !(it.axisW > 0)) continue; matches.push(it); } document.getElementById('results').innerHTML = renderTableMilling(matches); }
+      const C3 = document.getElementById('L-C3').value;
+      const C4 = +document.getElementById('L-C4').value || 0;
+      const C5 = +document.getElementById('L-C5').value || 0;
+      const C6 = +document.getElementById('L-C6').value || 0;
+      const C7 = +document.getElementById('L-C7').value || 0;
+      const C8 = document.getElementById('L-C8').checked;
+      const C9 = document.getElementById('L-C9').checked;
+      const C10 = document.getElementById('L-C10').checked;
+
+      const cand = (C3 && headerMap[C3]) ? headerMap[C3] : dataStore;
+      const matches = [];
+      for (const item of cand) {
+        if (!item.name) continue;
+        if (C4 && item.v9 !== -1 && (C4 > item.v9 || (C4 + 100) < item.v9)) continue;
+        if (C5 && item.v10 !== -1 && (C5 > item.v10 || (C5 + C5 * 1.5) < item.v10)) continue;
+        if (C6 && item.v34 !== -1 && (C6 > item.v34)) continue;
+        if (C7 && item.v35 !== -1 && (item.v35 < C7)) continue; // патрон ≥ требуемого
+        if (C8 && !item.f15) continue;
+        if (C9 && !item.f17) continue;
+        if (C10 && !item.f56) continue;
+        matches.push(item);
+      }
+      document.getElementById('results').innerHTML = renderTableLathe(matches);
+    }
+
+    function doSearchMilling() {
+      const { dataStore } = datasets.milling;
+      if (!dataStore.length) { alert('Данные ещё загружаются…'); return; }
+
+      const F = {
+        type: document.getElementById('M-C3').value.trim(),
+        len: +document.getElementById('M-C4').value || 0,
+        width: +document.getElementById('M-C5').value || 0,
+        spin: +document.getElementById('M-C6').value || 0,
+        pConst: +document.getElementById('M-C7').value || 0,
+        pMax: +document.getElementById('M-C8').value || 0,
+        x: +document.getElementById('M-C9').value || 0,
+        y: +document.getElementById('M-C10').value || 0,
+        z: +document.getElementById('M-C11').value || 0,
+        taper: document.getElementById('M-C12').value.trim(),
+        w: document.getElementById('M-C13').checked
+      };
+
+      const matches = [];
+      for (const it of dataStore) {
+        if (!it.name) continue;
+        if (F.type && String(it.type).trim() !== F.type) continue;
+        if (F.taper && String(it.taper).trim() !== F.taper) continue;
+        if (F.len && it.len !== -1 && it.len < F.len) continue;
+        if (F.width && it.width !== -1 && it.width < F.width) continue;
+        if (F.spin && it.spindleSpeed !== -1 && it.spindleSpeed < F.spin) continue;
+        if (F.pConst && it.powerConst !== -1 && it.powerConst < F.pConst) continue;
+        if (F.pMax && it.powerMax !== -1 && it.powerMax < F.pMax) continue;
+        if (F.x && it.axisX !== -1 && it.axisX < F.x) continue;
+        if (F.y && it.axisY !== -1 && it.axisY < F.y) continue;
+        if (F.z && it.axisZ !== -1 && it.axisZ < F.z) continue;
+        if (F.w && !(it.axisW > 0)) continue; // ось W должна существовать
+        matches.push(it);
+      }
+      document.getElementById('results').innerHTML = renderTableMilling(matches);
+    }
 
     /* ===== Клики по строкам (делегирование) ===== */
-    function openDetails(rawId) { const id = encodeURIComponent(rawId); const tabParam = `&tab=${encodeURIComponent(activeTab)}`; window.location.href = `details.html?id=${id}${tabParam}`; }
-    function setupRowClickDelegation() { document.getElementById('results').addEventListener('click', (e) => { const tr = e.target.closest('tr.res-row'); if (!tr) return; const id = tr.dataset.id; if (id) openDetails(id); }); }
+    function openDetails(rawId) {
+      const id = encodeURIComponent(rawId);
+      const tabParam = `&tab=${encodeURIComponent(activeTab)}`;
+      window.open(`details.html?id=${id}${tabParam}`, '_blank');
+    }
+    function setupRowClickDelegation() {
+      document.getElementById('results').addEventListener('click', (e) => {
+        const tr = e.target.closest('tr.res-row');
+        if (!tr) return;
+        const id = tr.dataset.id;
+        if (id) openDetails(id);
+      });
+    }
 
     /* ===== Инициализация ===== */
     window.addEventListener('DOMContentLoaded', async () => {
       setupRowClickDelegation();
-      document.querySelectorAll('.tab-btn').forEach(btn => { btn.addEventListener('click', async () => { if (btn.dataset.tab === activeTab) return; document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); activeTab = btn.dataset.tab; document.getElementById('form-lathe').classList.toggle('hidden', activeTab !== 'lathe'); document.getElementById('form-milling').classList.toggle('hidden', activeTab !== 'milling'); await loadTabData(activeTab); }); });
+
+      // вкладки
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (btn.dataset.tab === activeTab) return;
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          activeTab = btn.dataset.tab;
+          document.getElementById('form-lathe').classList.toggle('hidden', activeTab !== 'lathe');
+          document.getElementById('form-milling').classList.toggle('hidden', activeTab !== 'milling');
+          await loadTabData(activeTab);
+        });
+      });
+
       document.getElementById('btn-search-lathe').addEventListener('click', doSearchLathe);
       document.getElementById('btn-search-milling').addEventListener('click', doSearchMilling);
+
+      // стартуем с токарных
       await loadTabData(activeTab);
     });
   </script>

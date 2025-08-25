@@ -1,193 +1,256 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
-  <meta charset="UTF-8" />
-  <title>Карточка оборудования</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { font-family: Arial, sans-serif; padding: 16px; max-width: 900px; margin: 0 auto; background:#f7f7f9; }
-    h2 { margin: 0 0 .75em 0; }
-    .card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:12px; }
-    .muted { color:#6b7280; }
-    table { width:100%; border-collapse: collapse; font-size:14px; }
-    th, td { padding:8px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
-    thead th { background:#f3f4f6; }
-    th { width:42%; }
-    .toolbar { margin-bottom:10px; display:flex; gap:8px; align-items:center; }
-    .back { text-decoration:none; font-weight:600; color:#2563eb; }
-    pre#error { white-space:pre-wrap; background:#fff5f5; border:1px solid #fbcfe8; padding:.6em; border-radius:6px; display:none; margin-top:10px; color:#9b1c1c; }
-    .section-head th { background:#f3f4f6; }
-  </style>
+    <meta charset="UTF-8" />
+    <title>Карточка оборудования</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 16px;
+            max-width: 900px;
+            margin: 0 auto;
+            background: #f7f7f9;
+        }
+
+        h2 {
+            margin: 0 0 .75em 0;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th,
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        thead th {
+            background: #f3f4f6;
+        }
+
+        th {
+            width: 42%;
+        }
+
+        .toolbar {
+            margin-bottom: 10px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .back {
+            text-decoration: none;
+            font-weight: 600;
+            color: #2563eb;
+        }
+
+        pre#error {
+            white-space: pre-wrap;
+            background: #fff5f5;
+            border: 1px solid #fbcfe8;
+            padding: .6em;
+            border-radius: 6px;
+            display: none;
+            margin-top: 10px;
+            color: #9b1c1c;
+        }
+
+        .section-head th {
+            background: #f3f4f6;
+        }
+    </style>
 </head>
+
 <body>
-  <div class="toolbar">
-    <a class="back" href="index.html">← Назад к поиску</a>
-    <span class="muted" id="meta"></span>
-  </div>
+    <div class="toolbar">
+        <a class="back" href="index.html">← Назад к поиску</a>
+        <span class="muted" id="meta"></span>
+    </div>
 
-  <h2 id="title">Загрузка…</h2>
+    <h2 id="title">Загрузка…</h2>
 
-  <div class="card">
-    <table id="kv"></table>
-    <pre id="error"></pre>
-  </div>
+    <div class="card">
+        <table id="kv"></table>
+        <pre id="error"></pre>
+    </div>
 
-<script>
-'use strict';
+    <script>
+        'use strict';
 
-/* ===== Конфиги листов ===== */
-const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
-const GIDS = { lathe: "1008569495", milling: "361418967" };
-const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}&_=${Date.now()}`;
+        /* ===== Конфиги листов ===== */
+        const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
+        const GIDS = { lathe: "1008569495", milling: "361418967" };
+        const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}&_=${Date.now()}`;
 
-/* ===== Утилиты ===== */
-const qs = new URLSearchParams(location.search);
-const id  = (qs.get("id") ? decodeURIComponent(qs.get("id")) : "").toLowerCase().trim();
-const tab = (qs.get("tab") || "lathe").toLowerCase();
-const gid = GIDS[tab] || GIDS.lathe;
+        /* ===== Утилиты ===== */
+        const qs = new URLSearchParams(location.search);
+        const id = (qs.get("id") ? decodeURIComponent(qs.get("id")) : "").toLowerCase().trim();
+        const tab = (qs.get("tab") || "lathe").toLowerCase();
+        const gid = GIDS[tab] || GIDS.lathe;
 
-function esc(s){ return String(s ?? "").replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
-function clean(s){ return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
-function hasValue(v){
-  const s = clean(v);
-  if (!s) return false;
-  if (/^[-–—]+$/.test(s)) return false;
-  if (/^(нет|n\/?a|na)$/i.test(s)) return false;
-  return true;
-}
+        function esc(s) { return String(s ?? "").replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
+        function clean(s) { return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
+        function hasValue(v) {
+            const s = clean(v);
+            if (!s) return false;
+            if (/^[-–—]+$/.test(s)) return false;
+            if (/^(нет|n\/?a|na)$/i.test(s)) return false;
+            return true;
+        }
 
-function parseCSV(text) {
-  const rows=[]; let row=[], cur='', quoted=false;
-  for (let i=0;i<text.length;i++){
-    const ch=text[i], next=text[i+1];
-    if (quoted){
-      if (ch==='"' && next === '"'){ cur+='"'; i++; }
-      else if (ch === '"'){ quoted=false; }
-      else { cur+=ch; }
-    } else {
-      if (ch === '"') quoted=true;
-      else if (ch === ','){ row.push(cur); cur=''; }
-      else if (ch === '\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
-      else if (ch === '\r'){ }
-      else { cur+=ch; }
-    }
-  }
-  if (cur.length || row.length){ row.push(cur); rows.push(row); }
-  return rows;
-}
+        function parseCSV(text) {
+            const rows = []; let row = [], cur = '', quoted = false;
+            for (let i = 0; i < text.length; i++) {
+                const ch = text[i], next = text[i + 1];
+                if (quoted) {
+                    if (ch === '"' && next === '"') { cur += '"'; i++; }
+                    else if (ch === '"') { quoted = false; }
+                    else { cur += ch; }
+                } else {
+                    if (ch === '"') quoted = true;
+                    else if (ch === ',') { row.push(cur); cur = ''; }
+                    else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+                    else if (ch === '\r') { }
+                    else { cur += ch; }
+                }
+            }
+            if (cur.length || row.length) { row.push(cur); rows.push(row); }
+            return rows;
+        }
 
-function pickLabelUnit(row){
-  const A = clean(row?.[0]);
-  const B = clean(row?.[1]);
-  const C = clean(row?.[2]);
-  if (!A && B) return { label: B, unit: C };
-  return { label: A, unit: B };
-}
+        function pickLabelUnit(row) {
+            const A = clean(row?.[0]);
+            const B = clean(row?.[1]);
+            const C = clean(row?.[2]);
+            if (!A && B) return { label: B, unit: C };
+            return { label: A, unit: B };
+        }
 
-function buildRows(matrix, col){
-  let last = matrix.length - 1;
-  while (last >= 0) {
-    const {label, unit} = pickLabelUnit(matrix[last]);
-    const v = clean(matrix[last]?.[col]);
-    if (label || unit || v) break;
-    last--;
-  }
+        function buildRows(matrix, col) {
+            let last = matrix.length - 1;
+            while (last >= 0) {
+                const { label, unit } = pickLabelUnit(matrix[last]);
+                const v = clean(matrix[last]?.[col]);
+                if (label || unit || v) break;
+                last--;
+            }
 
-  const top = [];
-  const rest = [];
-  const HEAD_TOKENS = new Set(["параметр","значение","ед. изм.","ед.изм.","ед изм","единицы измерения"]);
+            const top = [];
+            const rest = [];
+            const HEAD_TOKENS = new Set(["параметр", "значение", "ед. изм.", "ед.изм.", "ед изм", "единицы измерения"]);
 
-  for (let i = 0; i <= Math.min(2, last); i++) {
-    const {label} = pickLabelUnit(matrix[i]);
-    const value   = clean(matrix[i]?.[col]);
-    if (!value) continue;
-    top.push({ label, value });
-  }
+            for (let i = 0; i <= Math.min(2, last); i++) {
+                const { label } = pickLabelUnit(matrix[i]);
+                const value = clean(matrix[i]?.[col]);
+                if (!value) continue;
+                top.push({ label, value });
+            }
 
-  for (let i = 3; i <= last; i++) {
-    const {label, unit} = pickLabelUnit(matrix[i]);
-    const value = clean(matrix[i]?.[col]);
-    if (!value) continue;
-    const l = label.toLowerCase(), u = (unit||"").toLowerCase(), v = value.toLowerCase();
-    if (HEAD_TOKENS.has(l) || HEAD_TOKENS.has(u) || HEAD_TOKENS.has(v)) continue;
-    rest.push({ label, unit, value });
-  }
-  return { top, rest };
-}
+            for (let i = 3; i <= last; i++) {
+                const { label, unit } = pickLabelUnit(matrix[i]);
+                const value = clean(matrix[i]?.[col]);
+                if (!value) continue;
+                const l = label.toLowerCase(), u = (unit || "").toLowerCase(), v = value.toLowerCase();
+                if (HEAD_TOKENS.has(l) || HEAD_TOKENS.has(u) || HEAD_TOKENS.has(v)) continue;
+                rest.push({ label, unit, value });
+            }
+            return { top, rest };
+        }
 
-function fail(msg){
-  const box = document.getElementById("error");
-  box.textContent = msg;
-  box.style.display = "block";
-  document.getElementById("title").textContent = "Ошибка";
-}
+        function fail(msg) {
+            const box = document.getElementById("error");
+            box.textContent = msg;
+            box.style.display = "block";
+            document.getElementById("title").textContent = "Ошибка";
+        }
 
-async function main(){
-  if(!id){ fail("Не передан параметр id."); return; }
+        async function main() {
+            if (!id) { fail("Не передан параметр id."); return; }
 
-  let matrix;
-  try{
-    const resp = await fetch(csvUrl(gid));
-    if(!resp.ok) throw new Error(`CSV HTTP ${resp.status}`);
-    const text = await resp.text();
-    matrix = parseCSV(text);
-  }catch(e){
-    fail("Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + (e && e.message ? e.message : e));
-    return;
-  }
+            let matrix;
+            try {
+                const resp = await fetch(csvUrl(gid));
+                if (!resp.ok) throw new Error(`CSV HTTP ${resp.status}`);
+                const text = await resp.text();
+                matrix = parseCSV(text);
+            } catch (e) {
+                fail("Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + (e && e.message ? e.message : e));
+                return;
+            }
 
-  if(!matrix.length){ fail("Таблица пуста."); return; }
+            if (!matrix.length) { fail("Таблица пуста."); return; }
 
-  const cols = matrix[0].length;
-  let col = -1;
-  for(let j=3;j<cols;j++){
-    const h = String(matrix[0][j] ?? "").toLowerCase().trim();
-    if(h && h === id){ col = j; break; }
-  }
-  if(col === -1){ fail("Модель не найдена по id: " + id); return; }
+            const cols = matrix[0].length;
+            let col = -1;
+            for (let j = 3; j < cols; j++) {
+                const h = String(matrix[0][j] ?? "").toLowerCase().trim();
+                if (h && h === id) { col = j; break; }
+            }
+            if (col === -1) { fail("Модель не найдена по id: " + id); return; }
 
-  const brand = clean(matrix[1]?.[col]);
-  const name  = clean(matrix[2]?.[col]) || clean(matrix[0]?.[col]);
-  document.getElementById("title").textContent = (brand || name) ? `${brand} ${name}`.trim() : "Карточка оборудования";
-  document.getElementById("meta").textContent  = tab === "milling" ? "Фрезерные" : "Токарные";
+            const brand = clean(matrix[1]?.[col]);
+            const name = clean(matrix[2]?.[col]) || clean(matrix[0]?.[col]);
+            document.getElementById("title").textContent = (brand || name) ? `${brand} ${name}`.trim() : "Карточка оборудования";
+            document.getElementById("meta").textContent = tab === "milling" ? "Фрезерные" : "Токарные";
 
-  const { top, rest } = buildRows(matrix, col);
+            const { top, rest } = buildRows(matrix, col);
 
-  let html = "<tbody>";
-  for (const row of top) {
-    html += `
+            let html = "<tbody>";
+            for (const row of top) {
+                html += `
       <tr>
         <th>${esc(row.label)}</th>
         <td colspan="2"><strong>${esc(row.value)}</strong></td>
       </tr>`;
-  }
-  if(rest.length){
-    html += `
+            }
+            if (rest.length) {
+                html += `
       <tr class="section-head">
         <th><strong>Параметр</strong></th>
         <th><strong>Ед. изм.</strong></th>
         <th><strong>Значение</strong></th>
       </tr>`;
-  }
-  for (const row of rest) {
-    html += `
+            }
+            for (const row of rest) {
+                html += `
       <tr>
         <th>${esc(row.label)}</th>
         <td>${esc(row.unit)}</td>
         <td><strong>${esc(row.value)}</strong></td>
       </tr>`;
-  }
-  if (top.length===0 && rest.length===0){
-    html += `<tr><td colspan="3" class="muted">Нет данных</td></tr>`;
-  }
-  html += "</tbody>";
+            }
+            if (top.length === 0 && rest.length === 0) {
+                html += `<tr><td colspan="3" class="muted">Нет данных</td></tr>`;
+            }
+            html += "</tbody>";
 
-  document.getElementById("kv").innerHTML = html;
-}
+            document.getElementById("kv").innerHTML = html;
+        }
 
-main().catch(err => {
-  fail("Неожиданная ошибка: " + (err && err.message ? err.message : String(err)));
-});
-</script>
+        main().catch(err => {
+            fail("Неожиданная ошибка: " + (err && err.message ? err.message : String(err)));
+        });
+    </script>
 </body>
+
 </html>

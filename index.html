@@ -297,6 +297,32 @@
       `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`
     );
 
+    const CACHE_TTL_MS = 5 * 60 * 1000;
+
+      async function fetchSheetCSVCached(sheetId, gid) {
+        const key = `sheet:${sheetId}:${gid}`;
+        const now = Date.now();
+
+        // быстрый путь — пробуем взять из localStorage
+        try {
+          const cached = JSON.parse(localStorage.getItem(key) || "null");
+          if (cached && (now - cached.ts) < CACHE_TTL_MS && cached.csv) {
+            return cached.csv;
+          }
+        } catch (_) { /* игнор */ }
+
+        // сетевой запрос (без анти-кэша ?_=Date.now)
+        const url = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
+        const r = await fetch(url, { cache: "default" });
+        if (!r.ok) throw new Error(`CSV HTTP ${r.status}`);
+        const csv = await r.text();
+
+        // сохраняем (если нельзя — тихо игнорируем)
+        try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch (_) { }
+
+        return csv;
+      }
+
     /* ===== Состояние ===== */
     const datasets = {
       lathe: { dataStore: [], headerMap: {}, loaded: false },
@@ -611,9 +637,8 @@
       loading.style.display = 'block';
       try {
         if (!state.loaded) {
-          const r = await fetch(sheetCSV({ sheetId: SPREADSHEET_ID, gid: tab.gid }) + `&_=${Date.now()}`);
-          if (!r.ok) throw new Error(`CSV HTTP ${r.status}`);
-          const matrix = parseCSV(await r.text());
+          const csv = await fetchSheetCSVCached(SPREADSHEET_ID, tab.gid);
+          const matrix = parseCSV(csv);
           const parsed = (tabKey === 'lathe') ? matrixToRecordsLathe(matrix)
             : matrixToRecordsMilling(matrix);
           state.dataStore = parsed.res;

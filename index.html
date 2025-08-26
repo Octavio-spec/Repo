@@ -297,112 +297,111 @@
       `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`
     );
     
-    // ==== предупреждение при показе устаревших данных ====
+    // ==== предупреждение при показе устаревших данных (как было) ====
     function showStaleNotice(msg = "Показаны данные из кэша — сеть недоступна.") {
       const id = "staleNotice";
       let el = document.getElementById(id);
       if (!el) {
         el = document.createElement("div");
         el.id = id;
-        el.style.cssText = "margin:8px 0;padding:8px 10px;border:1px dashed #f59e0b;background:#fffaf0;color:#92400e;border-radius:6px;";
+        el.style.cssText =
+          "margin:8px 0;padding:8px 10px;border:1px dashed #f59e0b;background:#fffaf0;color:#92400e;border-radius:6px;";
         const title = document.getElementById("resultsTitle") || document.body;
         title.parentNode.insertBefore(el, title.nextSibling);
       }
       el.textContent = msg;
     }
 
-    // ==== кэш CSV в localStorage (5 мин) + ретраи + fallback + stale-on-error ====
-      const CACHE_TTL_MS = 5 * 60 * 1000;
+    // ==== кэш CSV в localStorage (5 мин) + параллельная гонка запросов ====
+    const CACHE_TTL_MS = 5 * 60 * 1000;
 
-      // подберите, если нужно ожидать дольше
-      function pickTimeoutMs() {
-        const et = (navigator.connection && navigator.connection.effectiveType) || "";
-        if (et.includes("2g")) return 60000;  // 60 c
-        if (et.includes("3g")) return 45000;  // 45 c
-        return 20000;                          // 20 c (4g/wi-fi/неизв.)
-      }
+    function pickTimeoutMs() {
+      const et = (navigator.connection && navigator.connection.effectiveType) || "";
+      if (et.includes("2g")) return 60000;  // 60 c
+      if (et.includes("3g")) return 35000;  // 35 c (меньше 45, чтобы не ждать вечность)
+      return 20000;                          // 20 c (4g/wi-fi/неизв.)
+    }
 
     async function fetchSheetCSVCached(sheetId, gid) {
       const key = `sheet:${sheetId}:${gid}`;
       const now = Date.now();
-      let lastErrs = []; // <-- объявляем заранее
 
-      // читаем кэш (даже если просрочен — будет как запасной вариант)
+      // читаем кэш (даже просроченный понадобится как fallback)
       let cached = null;
       try { cached = JSON.parse(localStorage.getItem(key) || "null"); } catch { }
 
+      // свежий кэш? — отдаём сразу
       if (cached && (now - cached.ts) < CACHE_TTL_MS && cached.csv) {
-        return cached.csv; // свежий кэш — отдаем сразу
+        return cached.csv;
       }
 
       const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
       const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
 
       // fetch с таймаутом
-      async function fetchWithTimeout(url, opts = {}, ms) {
+      const timeoutMs = pickTimeoutMs();
+      function fetchWithTimeout(url, cacheMode = "default") {
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), ms ?? pickTimeoutMs());
-        try {
-          const r = await fetch(url, { ...opts, signal: ctrl.signal });
-          return r;
-        } catch (e) {
-          if (e && e.name === "AbortError") throw new Error("Timeout");
-          throw e;
-        } finally {
-          clearTimeout(t);
-        }
+        const t = setTimeout(() => ctrl.abort(), timeoutMs);
+        return fetch(url, { cache: cacheMode, signal: ctrl.signal })
+          .finally(() => clearTimeout(t));
       }
 
-      // универсальная попытка с ретраями
-      async function tryFetch(url) {
-        const delaysMs = [0, 800, 1800]; // 3 попытки
-        let last;
-        for (let i = 0; i < delaysMs.length; i++) {
-          if (delaysMs[i]) await new Promise(r => setTimeout(r, delaysMs[i]));
-          try {
-            const r = await fetchWithTimeout(url, { cache: i === 0 ? "default" : "reload" });
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            return await r.text();
-          } catch (e) { last = e; }
-        }
-        throw last || new Error("Failed to fetch");
+      // helper: превращаем fetch в «успешный или ошибка с текстом»
+      async function tryText(url, cacheMode) {
+        const r = await fetchWithTimeout(url, cacheMode);
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
       }
 
-      // 1) proxy
+      // ---- Гонка: стартуем proxy сразу, через 1200мс — direct. Берём первый успех.
+      // Параллельно пускаем второй запрос к proxy с cache:'reload', но только если первый не ответил быстро.
+      const runners = [];
+
+      // proxy (default)
+      const p1 = tryText(proxyUrl, "default");
+      runners.push(p1);
+
+      // proxy (reload) с задержкой 800мс
+      const p2 = new Promise((resolve, reject) => {
+        const t = setTimeout(() => {
+          tryText(proxyUrl, "reload").then(resolve, reject);
+        }, 800);
+        // если p1 успел — отменять нечего, просто пусть таймер сработает и запрос уйдёт только если нужно
+      });
+      runners.push(p2);
+
+      // direct Google с задержкой 1200мс
+      const p3 = new Promise((resolve, reject) => {
+        const t = setTimeout(() => {
+          tryText(directUrl, "default").then(resolve, reject);
+        }, 1200);
+      });
+      runners.push(p3);
+
+      let csv = null, firstErrs = [];
       try {
-        const csv = await tryFetch(proxyUrl);
+        // Берём первый успешно отработавший промис
+        csv = await Promise.any(runners);
+      } catch (aggregate) {
+        // Все три упали: собираем причины
+        (aggregate && aggregate.errors ? aggregate.errors : [aggregate])
+          .forEach(e => firstErrs.push(e && e.message ? e.message : String(e)));
+      }
+
+      if (csv) {
         try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch { }
         return csv;
-      } catch (e1) {
-        lastErrs.push(`proxy: ${e1?.message || e1}`);
       }
 
-      // 2) proxy (reload)
-      try {
-        const csv = await tryFetch(proxyUrl);
-        try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch { }
-        return csv;
-      } catch (e2) {
-        lastErrs.push(`proxy(reload): ${e2?.message || e2}`);
-      }
-
-      // 3) google напрямую
-      try {
-        const csv = await tryFetch(directUrl);
-        try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch { }
-        return csv;
-      } catch (e3) {
-        lastErrs.push(`google: ${e3?.message || e3}`);
-      }
-
-      // 4) есть кэш — показываем его и предупреждение
+      // не повезло — если есть любой кэш, показываем его
       if (cached && cached.csv) {
         showStaleNotice("Показаны данные из кэша: сеть нестабильна/медленная.");
         return cached.csv;
       }
 
-      // 5) совсем не удалось
-      throw new Error("Не удалось получить CSV: " + lastErrs.join("; "));
+      // совсем не смогли
+      throw new Error("Не удалось получить CSV: " + firstErrs.join("; "));
     }
 
     /* ===== Состояние ===== */

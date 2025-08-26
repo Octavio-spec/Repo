@@ -2,6 +2,8 @@
 <html lang="ru">
 
 <head>
+  <link rel="preconnect" href="https://docs.google.com" crossorigin>
+  <link rel="dns-prefetch" href="https://docs.google.com">
   <meta charset="UTF-8" />
   <title>Поиск станков — токарные и фрезерные</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -836,7 +838,7 @@
     }
 
     /* ===== Инициализация ===== */
-    window.addEventListener('DOMContentLoaded', async () => {
+    window.addEventListener('DOMContentLoaded', () => {
       setupRowClickDelegation();
 
       // вкладки
@@ -855,8 +857,16 @@
       document.getElementById('btn-search-lathe').addEventListener('click', doSearchLathe);
       document.getElementById('btn-search-milling').addEventListener('click', doSearchMilling);
 
-      // стартуем с токарных
-      await loadTabData(activeTab);
+     // не блокируем отрисовку: загрузку данных запускаем позже
+      const kick = () => loadTabData(activeTab).catch(e => {
+        const errId = (activeTab === 'lathe') ? 'error' : 'error-m';
+        showErr(errId, "Неожиданная ошибка загрузки: " + (e?.message || e));
+    });
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(kick, { timeout: 2000 });
+      } else {
+        setTimeout(kick, 0); // уступаем кадр
+      }
     });
   </script>
 </body>

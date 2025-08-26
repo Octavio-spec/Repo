@@ -100,7 +100,7 @@
         /* ===== Конфиги листов ===== */
         const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
         const GIDS = { lathe: "1008569495", milling: "361418967" };
-        const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}&_=${Date.now()}`;
+        const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}`;
 
         /* ===== Утилиты ===== */
         const qs = new URLSearchParams(location.search);

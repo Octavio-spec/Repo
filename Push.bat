@@ -10,7 +10,7 @@ if "%msg%"=="" (
     exit /b
 )
 
-git add index.html
+git add index.html details.html
 git commit -m "!msg!"
 git push
 

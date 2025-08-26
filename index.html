@@ -297,14 +297,19 @@
       `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`
     );
     
-    // ==== кэш CSV в localStorage (5 минут) ====
+    // ==== кэш CSV в localStorage (5 минут) + ретраи и fallback ====
     const CACHE_TTL_MS = 5 * 60 * 1000;
 
     async function fetchSheetCSVCached(sheetId, gid) {
       const key = `sheet:${sheetId}:${gid}`;
       const now = Date.now();
 
-      // быстрый путь — из localStorage
+      // 0) оффлайн?
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        throw new Error("Нет сети (offline)");
+      }
+
+      // 1) быстрый путь — из localStorage
       try {
         const cached = JSON.parse(localStorage.getItem(key) || "null");
         if (cached && (now - cached.ts) < CACHE_TTL_MS && cached.csv) {
@@ -312,19 +317,57 @@
         }
       } catch (_) { /* ignore quota/JSON */ }
 
-      // сетевой запрос через ваш прокси (/api/sheet) — кэшируется CDN+браузером
-      const url = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
-      const r = await fetch(url, { cache: "default" });
-      if (!r.ok) throw new Error(`CSV HTTP ${r.status}`);
-      const csv = await r.text();
+      // Вспомогательные URL
+      const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
+      const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
 
-      // сохраняем в localStorage
+      // 2) запрос с таймаутом
+      async function fetchWithTimeout(url, opts = {}, ms = 12000) {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), ms);
+        try {
+          const r = await fetch(url, { ...opts, signal: ctrl.signal });
+          return r;
+        } finally {
+          clearTimeout(t);
+        }
+      }
+
+      // 3) пробуем прокси (CDN/кэш Netlify)
+      let lastErr = "";
       try {
-        localStorage.setItem(key, JSON.stringify({ ts: now, csv }));
-      } catch (_) { /* ignore quota */ }
+        let r = await fetchWithTimeout(proxyUrl, { cache: "default" });
+        if (!r.ok) throw new Error(`Proxy HTTP ${r.status}`);
+        const csv = await r.text();
+        try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch (_) { }
+        return csv;
+      } catch (e1) {
+        lastErr = (e1 && e1.message) ? e1.message : String(e1);
+        // повтор через reload-кэш
+        try {
+          let r2 = await fetchWithTimeout(proxyUrl, { cache: "reload" });
+          if (!r2.ok) throw new Error(`Proxy(reload) HTTP ${r2.status}`);
+          const csv = await r2.text();
+          try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch (_) { }
+          return csv;
+        } catch (e2) {
+          lastErr += `; ${e2 && e2.message ? e2.message : String(e2)}`;
+        }
+      }
 
-      return csv;
+      // 4) fallback напрямую к Google (иногда у оператора этот маршрут быстрее)
+      try {
+        const r = await fetchWithTimeout(directUrl, { cache: "default" });
+        if (!r.ok) throw new Error(`Google HTTP ${r.status}`);
+        const csv = await r.text();
+        try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch (_) { }
+        return csv;
+      } catch (e3) {
+        lastErr += `; ${e3 && e3.message ? e3.message : String(e3)}`;
+        throw new Error(`Не удалось получить CSV: ${lastErr}`);
+      }
     }
+
 
     /* ===== Состояние ===== */
     const datasets = {

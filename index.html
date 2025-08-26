@@ -35,9 +35,9 @@
     }
 
     .tab-btn.active {
-      background: #2563eb;
+      background: #ec691f;
       color: #fff;
-      border-color: #2563eb;
+      border-color: #ec691f;
     }
 
     /* Макет */
@@ -92,15 +92,15 @@
     }
 
     .form-box button {
-      background: #2563eb;
+      background: #ec691f;
       color: #fff;
-      border-color: #2563eb;
+      border-color: #ec691f;
       cursor: pointer;
     }
 
     .form-box button:hover {
-      background: #1d4ed8;
-      border-color: #1d4ed8;
+      background: #ec691f;
+      border-color: #ec691f;
     }
 
     input[type="number"]::-webkit-outer-spin-button,
@@ -321,13 +321,28 @@
       const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
       const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
 
-      // 2) запрос с таймаутом
-      async function fetchWithTimeout(url, opts = {}, ms = 12000) {
+      // Определяем разумный таймаут от условий сети
+      function pickTimeoutMs() {
+        const et = navigator.connection && navigator.connection.effectiveType || "";
+        // 2g — очень медленно, 3g — медленно, 4g — обычно ок
+        if (et.includes("2g")) return 45000;   // 45 c
+        if (et.includes("3g")) return 30000;   // 30 c
+        return 18000;                           // 18 c (4g/wi-fi или неизвестно)
+      }
+
+      // fetch с таймаутом + явные тексты ошибок
+      async function fetchWithTimeout(url, opts = {}, ms) {
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), ms);
+        const t = setTimeout(() => ctrl.abort(), ms || pickTimeoutMs());
         try {
           const r = await fetch(url, { ...opts, signal: ctrl.signal });
           return r;
+        } catch (e) {
+          // даём читаемое сообщение при таймауте
+          if (e && e.name === "AbortError") {
+            throw new Error("Timeout");
+          }
+          throw e;
         } finally {
           clearTimeout(t);
         }
@@ -364,7 +379,7 @@
         return csv;
       } catch (e3) {
         lastErr += `; ${e3 && e3.message ? e3.message : String(e3)}`;
-        throw new Error(`Не удалось получить CSV: ${lastErr}`);
+        throw new Error("Не удалось получить CSV: " + lastErrs.join("; "));
       }
     }
 

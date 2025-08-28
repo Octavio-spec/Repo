@@ -326,30 +326,48 @@
     }
 
     async function fetchSheetCSVRace(tabKey, sheetId, gid) {
+      // 1) ваше зеркало на домене
       const mirrorUrl = `/data/${tabKey}.csv`;
+
+      // 2) ваш proxy-функция
       const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
+
+      // 3) прямой export CSV
       const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
 
-      const timeoutMs = 12000; // можно меньше, т.к. зеркало ближе
-      const withTimeout = (url, cacheMode = "default") => {
+      // 4) published-to-web CSV (ВАШ реальный publish base из сообщения)
+      const publishBase = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub";
+      const publishedUrl = `${publishBase}?gid=${encodeURIComponent(gid)}&single=true&output=csv`;
+
+      const timeoutMs = 12000;
+      function withTimeout(url, cacheMode = "default") {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), timeoutMs);
         return fetch(url, { cache: cacheMode, signal: ctrl.signal })
           .finally(() => clearTimeout(t));
-      };
+      }
       const tryText = (url, cache = "default") =>
-        withTimeout(url, cache).then(r => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        withTimeout(url, cache).then(async r => {
+          if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
           return r.text();
         });
 
-      // Зеркало — сразу; proxy через 300мс; direct через 900мс
+      // порядок: зеркало (сразу), proxy (через 200мс), published (через 500мс), export (через 900мс)
       const racers = [
         tryText(mirrorUrl, "default"),
-        new Promise((res, rej) => setTimeout(() => tryText(proxyUrl, "default").then(res, rej), 300)),
+        new Promise((res, rej) => setTimeout(() => tryText(proxyUrl, "default").then(res, rej), 200)),
+        new Promise((res, rej) => setTimeout(() => tryText(publishedUrl, "default").then(res, rej), 500)),
         new Promise((res, rej) => setTimeout(() => tryText(directUrl, "default").then(res, rej), 900)),
       ];
-      return Promise.any(racers);
+
+      try {
+        return await Promise.any(racers);
+      } catch (agg) {
+        // Диагностика в консоль — поможет понять, что именно падает
+        const errs = agg && agg.errors ? agg.errors : [agg];
+        console.error("CSV race failed:", errs.map(e => e && e.message ? e.message : String(e)));
+        throw new Error("All sources failed");
+      }
     }
 
     /* ===== Состояние ===== */

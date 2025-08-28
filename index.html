@@ -856,8 +856,39 @@
       }
     }
 
+    /* ===== Клики по строкам (делегирование) ===== */
+    function setupRowClickDelegation() {
+      document.getElementById('results').addEventListener('click', (e) => {
+        // если кликнули по <a>, то работаем как ссылка (браузер сам перейдёт)
+        const link = e.target.closest('a.model-link');
+        if (link) return;
+
+        // иначе ищем всю строку
+        const tr = e.target.closest('tr.res-row');
+        if (!tr) return;
+        const id = tr.dataset.id;
+        if (!id) return;
+
+        const url = `details.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(activeTab)}`;
+        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        try {
+          if (isMobile) {
+            // на мобильных — в той же вкладке
+            window.location.href = url;
+          } else {
+            // на десктопе — в новой вкладке
+            const w = window.open(url, '_blank', 'noopener');
+            if (!w) window.location.href = url; // если блокировщик запретил popup
+          }
+        } catch {
+          window.location.href = url;
+        }
+      });
+    }
+
     /* ===== Инициализация ===== */
     window.addEventListener('DOMContentLoaded', () => {
+      setupRowClickDelegation();
       
       // вкладки
       document.querySelectorAll('.tab-btn').forEach(btn => {

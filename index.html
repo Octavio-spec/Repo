@@ -829,14 +829,14 @@
       const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
       if (isMobile) {
-        // только в текущей вкладке
-        window.location.assign(url);
+        // мобильные — в текущей вкладке
+        window.location.href = url;
       } else {
-        // только в новой вкладке (если заблокирован popup — fallback)
-        const w = window.open(url, "_blank", "noopener,noreferrer");
-        if (!w) window.location.assign(url);
+        // десктоп — в новой вкладке, без fallback (чтобы не было двойного открытия)
+        window.open(url, "_blank", "noopener");
       }
     }
+
 
     /* ===== Клики по строкам (делегирование) ===== */
     let _delegationBound = false;
@@ -847,10 +847,6 @@
 
       const root = document.getElementById("results");
       root.addEventListener("click", (e) => {
-        // если вдруг остались <a> — гасим их дефолт
-        const a = e.target.closest("a");
-        if (a) { e.preventDefault(); e.stopPropagation(); return; }
-
         const tr = e.target.closest("tr.res-row");
         if (!tr) return;
 

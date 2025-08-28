@@ -335,7 +335,7 @@
             const gid = GIDS[tab] || GIDS.lathe;
             if (!id) { throw new Error('Модель не указана (id)'); }
 
-            const csv = await fetchSheetCSVCached(SPREADSHEET_ID, gid);
+            const csv = await fetchSheetCSVRace(tabKey, SPREADSHEET_ID, tab.gid);
             const matrix = parseCSV(csv);
             const col = findColumnByModel(matrix, id);
             if (col === -1) { throw new Error('Модель не найдена по id: ' + id); }

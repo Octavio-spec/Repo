@@ -822,30 +822,41 @@
       document.getElementById('results').innerHTML = renderTableMilling(matches);
     }
 
+    //Открытие вкладки через строку
+    function openDetails(rawId) {
+      if (!rawId) return;
+      const url = `details.html?id=${encodeURIComponent(rawId)}&tab=${encodeURIComponent(activeTab)}`;
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+      if (isMobile) {
+        // только в текущей вкладке
+        window.location.assign(url);
+      } else {
+        // только в новой вкладке (если заблокирован popup — fallback)
+        const w = window.open(url, "_blank", "noopener,noreferrer");
+        if (!w) window.location.assign(url);
+      }
+    }
+
     /* ===== Клики по строкам (делегирование) ===== */
+    let _delegationBound = false;
+
     function setupRowClickDelegation() {
-      document.getElementById('results').addEventListener('click', (e) => {
-        const tr = e.target.closest('tr.res-row');
+      if (_delegationBound) return;           // не навешиваем второй раз
+      _delegationBound = true;
+
+      const root = document.getElementById("results");
+      root.addEventListener("click", (e) => {
+        // если вдруг остались <a> — гасим их дефолт
+        const a = e.target.closest("a");
+        if (a) { e.preventDefault(); e.stopPropagation(); return; }
+
+        const tr = e.target.closest("tr.res-row");
         if (!tr) return;
 
-        const id = tr.dataset.id;
-        if (!id) return;
-
-        const url = `details.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(activeTab)}`;
-        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-        try {
-          if (isMobile) {
-            // на мобильных — в той же вкладке
-            window.location.href = url;
-          } else {
-            // на десктопе — в новой вкладке
-            const w = window.open(url, '_blank', 'noopener');
-            if (!w) window.location.href = url; // если popup заблокирован
-          }
-        } catch {
-          window.location.href = url;
-        }
+        e.preventDefault();
+        e.stopPropagation();
+        openDetails(tr.dataset.id);
       });
     }
 

@@ -223,7 +223,7 @@
         }
         async function fetchSheetCSVRace(tab, sheetId, gid) {
             // 1) ваше зеркало на домене
-            const mirrorUrl = `/data/${tabKey}.csv`;
+            const mirrorUrl = `/data/${tab}.csv`;
 
             // 2) ваш proxy-функция
             const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
@@ -354,7 +354,7 @@
             if (!id) { throw new Error('Модель не указана (id)'); }
 
             const csv = await fetchSheetCSVRace(tab, SPREADSHEET_ID, gid);
-            const matrix = parseCSV(csv);
+                        const matrix = parseCSV(csv);
             const col = findColumnByModel(matrix, id);
             if (col === -1) { throw new Error('Модель не найдена по id: ' + id); }
 

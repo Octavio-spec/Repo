@@ -640,7 +640,7 @@
     function renderTableLathe(items) {
       if (!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
       const rows = items.map(it => `
-      <tr class="res-row" data-id="${it.id}">
+      <tr class="res-row" data-id="${it.id}" role="link" tabindex="0">
         <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
         <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
         <td>${fmt(it.v9)}</td>
@@ -673,7 +673,7 @@
     function renderTableMilling(items) {
       if (!items || !items.length) return '<div class="empty">Ничего не найдено</div>';
       const rows = items.map(it => `
-      <tr class="res-row" data-id="${it.id}">
+      <tr class="res-row" data-id="${it.id}" role="link" tabindex="0">
         <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
         <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
         <td>${fmt(it.type)}</td>
@@ -829,10 +829,9 @@
       const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
       if (isMobile) {
-        // мобильные — в текущей вкладке
-        window.location.href = url;
+        // даём завершиться обработчику тапа
+        setTimeout(() => { window.location.href = url; }, 0);
       } else {
-        // десктоп — в новой вкладке, без fallback (чтобы не было двойного открытия)
         window.open(url, "_blank", "noopener");
       }
     }
@@ -840,19 +839,39 @@
 
     /* ===== Клики по строкам (делегирование) ===== */
     let _delegationBound = false;
+    let _lastNavTs = 0;
 
     function setupRowClickDelegation() {
-      if (_delegationBound) return;           // не навешиваем второй раз
+      if (_delegationBound) return;
       _delegationBound = true;
 
       const root = document.getElementById("results");
-      root.addEventListener("click", (e) => {
+
+      function activateFromEvent(e) {
         const tr = e.target.closest("tr.res-row");
         if (!tr) return;
-
-        e.preventDefault();
-        e.stopPropagation();
+        const now = Date.now();
+        if (now - _lastNavTs < 400) return;   // анти-двойной тап
+         _lastNavTs = now;
         openDetails(tr.dataset.id);
+      }
+
+      // обычные клики мышью/тапом (в большинстве браузеров хватает)
+      root.addEventListener("click", (e) => {
+        activateFromEvent(e);
+      });
+
+      // явная поддержка тачей: iOS/Safari иногда не даёт click
+      root.addEventListener("pointerup", (e) => {
+        if (e.pointerType === "touch") activateFromEvent(e);
+      }, { passive: true });
+
+      // клавиатура: Enter / Space на сфокусированной строке
+      root.addEventListener("keydown", (e) => {
+        if ((e.key === "Enter" || e.key === " ") && e.target.closest("tr.res-row")) {
+          e.preventDefault();
+          activateFromEvent(e);
+        }
       });
     }
 

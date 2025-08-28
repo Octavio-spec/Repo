@@ -642,7 +642,7 @@
       const rows = items.map(it => `
       <tr class="res-row" data-id="${it.id}">
         <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
-        <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+        <td class="td-name">${it.name ? `<a class="model-link" data-id="${it.id}">${esc(it.name)}</a>` : "<span class='muted'>—</span>"}</td>
         <td>${fmt(it.v9)}</td>
         <td>${fmt(it.v10)}</td>
         <td>${fmt(it.v34)}</td>
@@ -675,7 +675,7 @@
       const rows = items.map(it => `
       <tr class="res-row" data-id="${it.id}">
         <td><strong>${it.brand ? esc(it.brand) : "<span class='muted'>—</span>"}</strong></td>
-        <td class="td-name">${it.name ? esc(it.name) : "<span class='muted'>—</span>"}</td>
+        <td class="td-name">${it.name ? `<a class="model-link" data-id="${it.id}">${esc(it.name)}</a>` : "<span class='muted'>—</span>"}</td>
         <td>${fmt(it.type)}</td>
         <td>${fmt(it.len)}</td>
         <td>${fmt(it.width)}</td>
@@ -783,6 +783,22 @@
         matches.push(item);
       }
       document.getElementById('results').innerHTML = renderTableLathe(matches);
+      wireModelLinks();
+
+      function wireModelLinks() {
+        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        document.querySelectorAll('#results a.model-link').forEach(a => {
+          const id = a.getAttribute('data-id');
+          if (!id) return;
+          const url = `details.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(activeTab)}`;
+          a.setAttribute('href', url);
+          if (!isMobile) {
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener');
+          }
+        });
+      }
     }
 
     function doSearchMilling() {
@@ -820,21 +836,38 @@
         matches.push(it);
       }
       document.getElementById('results').innerHTML = renderTableMilling(matches);
+      wireModelLinks();
+
+      function wireModelLinks() {
+        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+        document.querySelectorAll('#results a.model-link').forEach(a => {
+          const id = a.getAttribute('data-id');
+          if (!id) return;
+          const url = `details.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(activeTab)}`;
+          a.setAttribute('href', url);
+          if (!isMobile) {
+            a.setAttribute('target', '_blank');
+            a.setAttribute('rel', 'noopener');
+          }
+        });
+      }
     }
 
     /* ===== Клики по строкам (делегирование) ===== */
     function openDetails(rawId) {
-      const id = encodeURIComponent(rawId);
-      const tabParam = `&tab=${encodeURIComponent(activeTab)}`;
-      window.open(`details.html?id=${id}${tabParam}`, '_blank');
-    }
-    function setupRowClickDelegation() {
-      document.getElementById('results').addEventListener('click', (e) => {
-        const tr = e.target.closest('tr.res-row');
-        if (!tr) return;
-        const id = tr.dataset.id;
-        if (id) openDetails(id);
-      });
+      const url = `details.html?id=${encodeURIComponent(rawId)}&tab=${encodeURIComponent(activeTab)}`;
+      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+      try {
+        if (isMobile) {
+          window.location.href = url; // в той же вкладке
+        } else {
+          const w = window.open(url, '_blank', 'noopener');
+          if (!w) window.location.href = url; // если pop-up заблокирован
+        }
+      } catch {
+        window.location.href = url;
+      }
     }
 
     /* ===== Инициализация ===== */

@@ -227,6 +227,10 @@
         white-space: normal;
       }
     }
+
+    .res-row.pending { background: rgba(236,105,31,.10) !important; }
+    .res-row.pending td { opacity: .7; }
+
   </style>
 </head>
 
@@ -439,6 +443,12 @@
       return Number.isFinite(n) ? n : 0;
     }
 
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function markRowPending(id, on) {
+      const tr = document.querySelector(`tr.res-row[data-id="${CSS.escape(id)}"]`);
+      if (tr) tr.classList.toggle('pending', !!on);
+    }
 
     /* CSV-парсер c поддержкой кавычек/запятых */
     function parseCSV(text) {
@@ -823,18 +833,48 @@
     }
 
     //Открытие вкладки через строку
-    function openDetails(rawId) {
+    async function openDetails(rawId) {
       if (!rawId) return;
+
       const url = `details.html?id=${encodeURIComponent(rawId)}&tab=${encodeURIComponent(activeTab)}`;
       const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
+      // параметры ожидания
+      const MIN_DELAY_MS = 1800;  // минимум подождём ~1.8 c
+      const MAX_WAIT_MS = 4000;  // максимум – 4 c
+      const start = performance.now();
+
+      // подсветим строку
+      markRowPending(rawId, true);
+
+      // префетчим CSV для текущей вкладки (упадёт – ничего страшного)
+      const prefetch = fetchSheetCSVCached(SPREADSHEET_ID, TABS[activeTab].gid).catch(() => { });
+
+      // ждём: пока префетч завершится ИЛИ истечёт MAX_WAIT,
+      // но при этом выдерживаем минимум MIN_DELAY_MS
+      try {
+        await Promise.race([
+          (async () => {
+            await prefetch;
+            const spent = performance.now() - start;
+            if (spent < MIN_DELAY_MS) await sleep(MIN_DELAY_MS - spent);
+          })(),
+          sleep(MAX_WAIT_MS)
+        ]);
+      } finally {
+        markRowPending(rawId, false);
+      }
+
+      // навигация
       if (isMobile) {
-        // даём завершиться обработчику тапа
-        setTimeout(() => { window.location.href = url; }, 0);
+        // в текущей вкладке
+        window.location.href = url;
       } else {
+        // в новой вкладке (без fallback, чтобы не было двойного открытия)
         window.open(url, "_blank", "noopener");
       }
     }
+
 
 
     /* ===== Клики по строкам (делегирование) ===== */

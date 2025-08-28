@@ -221,35 +221,31 @@
             if (et.includes('3g')) return 35000; // 35s
             return 20000; // 20s
         }
-        async function fetchSheetCSVCached(sheetId, gid) {
-            const key = `sheet:${sheetId}:${gid}`; const now = Date.now();
-            let cached = null; try { cached = JSON.parse(localStorage.getItem(key) || 'null'); } catch { }
-            if (cached && (now - cached.ts) < CACHE_TTL_MS && cached.csv) { return cached.csv; }
-
-            const proxyUrl = sheetCSV(sheetId, gid);
+        async function fetchSheetCSVRace(tabKey, sheetId, gid) {
+            const mirrorUrl = `/data/${tabKey}.csv`;
+            const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
             const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
-            const timeoutMs = pickTimeoutMs();
-            function fetchWithTimeout(url, cacheMode = 'default') {
-                const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), timeoutMs);
-                return fetch(url, { cache: cacheMode, signal: ctrl.signal }).finally(() => clearTimeout(t));
-            }
-            async function tryText(url, cacheMode) { const r = await fetchWithTimeout(url, cacheMode); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); }
 
+            const timeoutMs = 12000; // можно меньше, т.к. зеркало ближе
+            const withTimeout = (url, cacheMode = "default") => {
+                const ctrl = new AbortController();
+                const t = setTimeout(() => ctrl.abort(), timeoutMs);
+                return fetch(url, { cache: cacheMode, signal: ctrl.signal })
+                        .finally(() => clearTimeout(t));
+            };
+            const tryText = (url, cache = "default") =>
+                withTimeout(url, cache).then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.text();
+                });
+
+            // Зеркало — сразу; proxy через 300мс; direct через 900мс
             const racers = [
-                tryText(proxyUrl, 'default'),
-                new Promise((res, rej) => setTimeout(() => tryText(proxyUrl, 'reload').then(res, rej), 800)),
-                new Promise((res, rej) => setTimeout(() => tryText(directUrl, 'default').then(res, rej), 1200)),
+                tryText(mirrorUrl, "default"),
+                new Promise((res, rej) => setTimeout(() => tryText(proxyUrl, "default").then(res, rej), 300)),
+                new Promise((res, rej) => setTimeout(() => tryText(directUrl, "default").then(res, rej), 900)),
             ];
-
-            try {
-                const csv = await Promise.any(racers);
-                try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch { }
-                return csv;
-            } catch (aggregate) {
-                if (cached && cached.csv) { showStaleNotice('Показаны данные из кэша: сеть нестабильна/медленная.'); return cached.csv; }
-                const errs = (aggregate && aggregate.errors) ? aggregate.errors : [aggregate];
-                throw new Error('Не удалось получить CSV: ' + errs.map(e => e?.message || String(e)).join('; '));
-            }
+            return Promise.any(racers);
         }
 
         /* ===== Поиск нужной колонки по id модели ===== */

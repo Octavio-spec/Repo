@@ -1,0 +1,40 @@
+name: Mirror Google Sheets to /public/data
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # каждые 10 минут
+  workflow_dispatch: {}       # вручную по кнопке
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Make data dir
+        run: mkdir -p public/data
+
+      - name: Download CSV (lathe + milling)
+        env:
+          PUB_BASE: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub"
+          GID_LATHE: "1008569495"
+          GID_MILL:  "361418967"
+        run: |
+          set -e
+          curl -fsSL --retry 5 --retry-delay 3 \
+            "$PUB_BASE?gid=$GID_LATHE&single=true&output=csv" \
+            -o public/data/lathe.csv
+          curl -fsSL --retry 5 --retry-delay 3 \
+            "$PUB_BASE?gid=$GID_MILL&single=true&output=csv" \
+            -o public/data/milling.csv
+
+      - name: Commit changes (if any)
+        run: |
+          set -e
+          git config user.name  "sheet-mirror-bot"
+          git config user.email "sheet-mirror-bot@users.noreply.github.com"
+          git add public/data/*.csv
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "mirror: update data $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          git push

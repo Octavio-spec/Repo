@@ -228,9 +228,6 @@
       }
     }
 
-    .res-row.pending { background: rgba(236,105,31,.10) !important; }
-    .res-row.pending td { opacity: .7; }
-
   </style>
 </head>
 
@@ -323,91 +320,36 @@
 
     function pickTimeoutMs() {
       const et = (navigator.connection && navigator.connection.effectiveType) || "";
-      if (et.includes("2g")) return 60000;  // 60 c
-      if (et.includes("3g")) return 35000;  // 35 c (меньше 45, чтобы не ждать вечность)
-      return 20000;                          // 20 c (4g/wi-fi/неизв.)
+      if (et.includes("2g")) return 25000;  // 25 c
+      if (et.includes("3g")) return 18000;  // 18 c (меньше 45, чтобы не ждать вечность)
+      return 12000;                          // 12 c (4g/wi-fi/неизв.)
     }
 
-    async function fetchSheetCSVCached(sheetId, gid) {
-      const key = `sheet:${sheetId}:${gid}`;
-      const now = Date.now();
-
-      // читаем кэш (даже просроченный понадобится как fallback)
-      let cached = null;
-      try { cached = JSON.parse(localStorage.getItem(key) || "null"); } catch { }
-
-      // свежий кэш? — отдаём сразу
-      if (cached && (now - cached.ts) < CACHE_TTL_MS && cached.csv) {
-        return cached.csv;
-      }
-
+    async function fetchSheetCSVRace(tabKey, sheetId, gid) {
+      const mirrorUrl = `/data/${tabKey}.csv`;
       const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
       const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
 
-      // fetch с таймаутом
-      const timeoutMs = pickTimeoutMs();
-      function fetchWithTimeout(url, cacheMode = "default") {
+      const timeoutMs = 12000; // можно меньше, т.к. зеркало ближе
+      const withTimeout = (url, cacheMode = "default") => {
         const ctrl = new AbortController();
         const t = setTimeout(() => ctrl.abort(), timeoutMs);
         return fetch(url, { cache: cacheMode, signal: ctrl.signal })
           .finally(() => clearTimeout(t));
-      }
+      };
+      const tryText = (url, cache = "default") =>
+        withTimeout(url, cache).then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.text();
+        });
 
-      // helper: превращаем fetch в «успешный или ошибка с текстом»
-      async function tryText(url, cacheMode) {
-        const r = await fetchWithTimeout(url, cacheMode);
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.text();
-      }
-
-      // ---- Гонка: стартуем proxy сразу, через 1200мс — direct. Берём первый успех.
-      // Параллельно пускаем второй запрос к proxy с cache:'reload', но только если первый не ответил быстро.
-      const runners = [];
-
-      // proxy (default)
-      const p1 = tryText(proxyUrl, "default");
-      runners.push(p1);
-
-      // proxy (reload) с задержкой 800мс
-      const p2 = new Promise((resolve, reject) => {
-        const t = setTimeout(() => {
-          tryText(proxyUrl, "reload").then(resolve, reject);
-        }, 800);
-        // если p1 успел — отменять нечего, просто пусть таймер сработает и запрос уйдёт только если нужно
-      });
-      runners.push(p2);
-
-      // direct Google с задержкой 1200мс
-      const p3 = new Promise((resolve, reject) => {
-        const t = setTimeout(() => {
-          tryText(directUrl, "default").then(resolve, reject);
-        }, 1200);
-      });
-      runners.push(p3);
-
-      let csv = null, firstErrs = [];
-      try {
-        // Берём первый успешно отработавший промис
-        csv = await Promise.any(runners);
-      } catch (aggregate) {
-        // Все три упали: собираем причины
-        (aggregate && aggregate.errors ? aggregate.errors : [aggregate])
-          .forEach(e => firstErrs.push(e && e.message ? e.message : String(e)));
-      }
-
-      if (csv) {
-        try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch { }
-        return csv;
-      }
-
-      // не повезло — если есть любой кэш, показываем его
-      if (cached && cached.csv) {
-        showStaleNotice("Показаны данные из кэша: сеть нестабильна/медленная.");
-        return cached.csv;
-      }
-
-      // совсем не смогли
-      throw new Error("Не удалось получить CSV: " + firstErrs.join("; "));
+      // Зеркало — сразу; proxy через 300мс; direct через 900мс
+      const racers = [
+        tryText(mirrorUrl, "default"),
+        new Promise((res, rej) => setTimeout(() => tryText(proxyUrl, "default").then(res, rej), 300)),
+        new Promise((res, rej) => setTimeout(() => tryText(directUrl, "default").then(res, rej), 900)),
+      ];
+      return Promise.any(racers);
     }
 
     /* ===== Состояние ===== */
@@ -732,7 +674,7 @@
       try {
         if (!state.loaded) {
           // получаем CSV (из localStorage или сети), парсим
-          const csv = await fetchSheetCSVCached(SPREADSHEET_ID, tab.gid);
+          const csv = await fetchSheetCSVRace(tabKey, SPREADSHEET_ID, tab.gid);
           const matrix = parseCSV(csv);
 
           const parsed = (tabKey === "lathe")
@@ -833,49 +775,16 @@
     }
 
     //Открытие вкладки через строку
-    async function openDetails(rawId) {
+    function openDetails(rawId) {
       if (!rawId) return;
-
       const url = `details.html?id=${encodeURIComponent(rawId)}&tab=${encodeURIComponent(activeTab)}`;
       const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-      // параметры ожидания
-      const MIN_DELAY_MS = 1800;  // минимум подождём ~1.8 c
-      const MAX_WAIT_MS = 4000;  // максимум – 4 c
-      const start = performance.now();
-
-      // подсветим строку
-      markRowPending(rawId, true);
-
-      // префетчим CSV для текущей вкладки (упадёт – ничего страшного)
-      const prefetch = fetchSheetCSVCached(SPREADSHEET_ID, TABS[activeTab].gid).catch(() => { });
-
-      // ждём: пока префетч завершится ИЛИ истечёт MAX_WAIT,
-      // но при этом выдерживаем минимум MIN_DELAY_MS
-      try {
-        await Promise.race([
-          (async () => {
-            await prefetch;
-            const spent = performance.now() - start;
-            if (spent < MIN_DELAY_MS) await sleep(MIN_DELAY_MS - spent);
-          })(),
-          sleep(MAX_WAIT_MS)
-        ]);
-      } finally {
-        markRowPending(rawId, false);
-      }
-
-      // навигация
       if (isMobile) {
-        // в текущей вкладке
-        window.location.href = url;
+        window.location.href = url;       // текущая вкладка
       } else {
-        // в новой вкладке (без fallback, чтобы не было двойного открытия)
-        window.open(url, "_blank", "noopener");
+        window.open(url, "_blank", "noopener"); // новая, без noreferrer и без fallback
       }
     }
-
-
 
     /* ===== Клики по строкам (делегирование) ===== */
     let _delegationBound = false;

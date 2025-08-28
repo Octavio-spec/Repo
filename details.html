@@ -267,25 +267,34 @@
             return t === 'параметр' || t === 'значение' || t === 'ед. изм.' || t === 'ед.изм.';
         }
 
-        function renderParams(matrix, col) {
+        function hasValue(v) {
+            const s = String(v ?? '').replace(/\u00A0/g, ' ').trim();
+            if (!s) return false;                 // пусто
+            if (/^[-–—]+$/.test(s)) return false; // одни тире
+            if (/^(нет|n\/?a|na)$/i.test(s)) return false; // “нет/NA”
+            return true;
+        }
+
+       function renderParams(matrix, col) {
             const last = getLastUsefulRow(matrix, col);
             let html = '';
             for (let r = 3; r <= last; r++) {
-                const param = String(safeCell(matrix, r, 1)).trim(); // B: название параметра
-                const unit = String(safeCell(matrix, r, 2)).trim(); // C: ед. изм. (если есть)
-                const val = String(safeCell(matrix, r, col)).trim(); // значение для выбранной модели
+                const param = String(safeCell(matrix, r, 1)).trim(); // B
+                const unit = String(safeCell(matrix, r, 2)).trim(); // C
+                const val = String(safeCell(matrix, r, col)).trim(); // значение
 
-                // пропускаем пустые и «служебные» строки
-                if (!param && !val) continue;
-                if (isJunkHeader(param)) continue;
+                // пропускаем “шапки” и пустые/псевдопустые значения
+                if (isJunkHeader(param) || isJunkHeader(unit) || isJunkHeader(val)) continue;
+                if (!hasValue(val)) continue; // <<< ключевая строка — не выводим пустые значения
 
-                const p = param ? esc(param) : '<span class="muted">—</span>';
-                const u = unit ? esc(unit) : '<span class="muted">—</span>';
-                const v = val ? esc(val) : '<span class="muted">—</span>';
+                const p = hasValue(param) ? esc(param) : '<span class="muted">—</span>';
+                const u = hasValue(unit) ? esc(unit) : '<span class="muted">—</span>';
+                const v = esc(val);
 
                 html += `<tr><td>${p}</td><td>${u}</td><td>${v}</td></tr>`;
             }
-            $('#detailsBody').innerHTML = html || `<tr><td colspan="3" class="muted">Данные отсутствуют</td></tr>`;
+            $('#detailsBody').innerHTML =
+                html || `<tr><td colspan="3" class="muted">Данные отсутствуют</td></tr>`;
         }
 
         /* ===== Основной поток ===== */

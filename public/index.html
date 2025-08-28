@@ -289,6 +289,32 @@
 
   <script>
     'use strict';
+    let ctrls = [];
+
+    function pickTimeoutMs() {
+      const et = (navigator.connection && navigator.connection.effectiveType) || '';
+      if (et.includes('2g')) return 60000;
+      if (et.includes('3g')) return 35000;
+      return 20000;
+    }
+
+    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+    function fetchWithTimeout(url, timeoutMs, cacheMode = 'default') {
+      const ctrl = new AbortController();
+      ctrls.push(ctrl);
+
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+
+      return fetch(url, { cache: cacheMode, signal: ctrl.signal })
+        .then(async r => {
+          clearTimeout(timer);
+          if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
+          // 404 на зеркале/источниках — это «жёсткая» ошибка, чтобы Promise.any мог взять другой источник
+          if (r.status === 404) throw new Error(`${url} -> 404`);
+          return r.text();
+        });
+    }
 
     /* ===== Конфиг листов ===== */
     const SPREADSHEET_ID = '1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC';
@@ -296,9 +322,6 @@
       lathe: { gid: '1008569495' },
       milling: { gid: '361418967' }
     };
-    const sheetCSV = ({ sheetId, gid }) => (
-      `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`
-    );
     
     // ==== предупреждение при показе устаревших данных (как было) ====
     function showStaleNotice(msg = "Показаны данные из кэша — сеть недоступна.") {
@@ -318,60 +341,30 @@
     // ==== кэш CSV в localStorage (5 мин) + параллельная гонка запросов ====
     const CACHE_TTL_MS = 5 * 60 * 1000;
 
-    function pickTimeoutMs() {
-      const et = (navigator.connection && navigator.connection.effectiveType) || "";
-      if (et.includes("2g")) return 25000;  // 25 c
-      if (et.includes("3g")) return 18000;  // 18 c (меньше 45, чтобы не ждать вечность)
-      return 12000;                          // 12 c (4g/wi-fi/неизв.)
-    }
-
     async function fetchSheetCSVRace(tabKey, sheetId, gid) {
-      const sources = [];
+      const timeoutMs = pickTimeoutMs();
 
-      // ====== (A) MIRROR — только если у вас реально есть /data/<tab>.csv ======
       const mirrorUrl = `/data/${tabKey}.csv`;
-      const mirrorTimeout = 1500; // 1.5s максимум
-      sources.push(fetchWithTimeout(mirrorUrl, mirrorTimeout, "no-store"));
-
-      // ====== (B) Proxy-функция ======
       const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
-      sources.push(lazy(200, () => fetchWithTimeout(proxyUrl, 12000, "default")));
-
-      // ====== (C) Published to web ======
-      const publishBase = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub";
-      const publishedUrl = `${publishBase}?gid=${encodeURIComponent(gid)}&single=true&output=csv`;
-      sources.push(lazy(500, () => fetchWithTimeout(publishedUrl, 12000, "default")));
-
-      // ====== (D) Прямой export ======
+      const publishedUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub?gid=${encodeURIComponent(gid)}&single=true&output=csv`;
       const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
-      sources.push(lazy(900, () => fetchWithTimeout(directUrl, 12000, "default")));
 
-      // ——— реализация гонки с отменой «проигравших» ———
-      const ctrls = [];
-      function fetchWithTimeout(url, ms, cacheMode) {
-        const ctrl = new AbortController();
-        ctrls.push(ctrl);
-        const t = setTimeout(() => ctrl.abort(), ms);
-        return fetch(url, { cache: cacheMode, signal: ctrl.signal }).then(async r => {
-          clearTimeout(t);
-          if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
-          // 404 на mirror — сразу бросаем, чтобы не висел
-          if (r.status === 404) throw new Error(`${url} -> 404`);
-          return r.text();
-        });
-      }
-      function lazy(delay, fn) {
-        return new Promise((res, rej) => setTimeout(() => fn().then(res, rej), delay));
-      }
+      const racers = [
+        fetchWithTimeout(mirrorUrl, timeoutMs, 'default'),
+        sleep(200).then(() => fetchWithTimeout(proxyUrl, timeoutMs, 'default')),
+        sleep(500).then(() => fetchWithTimeout(publishedUrl, timeoutMs, 'default')),
+        sleep(900).then(() => fetchWithTimeout(directUrl, timeoutMs, 'default')),
+      ];
 
       try {
-        const csv = await Promise.any(sources);
-        // победитель найден — гасим остальных
-        ctrls.forEach(c => { try { c.abort(); } catch { } });
+        const csv = await Promise.any(racers);
         return csv;
       } catch (agg) {
-        const errs = agg?.errors || [agg];
-        throw new Error("All sources failed: " + errs.map(e => e?.message || String(e)).join("; "));
+        const errs = (agg && agg.errors) ? agg.errors : [agg];
+        throw new Error('All sources failed: ' + errs.map(e => e?.message || String(e)).join('; '));
+      } finally {
+        // отменяем оставшиеся запросы и СБРАСЫВАЕМ массив, чтобы он был готов к следующему вызову
+        try { ctrls.forEach(c => { try { c.abort(); } catch { } }); } finally { ctrls = []; }
       }
     }
 
@@ -406,13 +399,6 @@
       const s = String(raw).replace(/\s+/g, "").replace(",", ".");
       const n = parseFloat(s);
       return Number.isFinite(n) ? n : 0;
-    }
-
-    function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-    function markRowPending(id, on) {
-      const tr = document.querySelector(`tr.res-row[data-id="${CSS.escape(id)}"]`);
-      if (tr) tr.classList.toggle('pending', !!on);
     }
 
     /* CSV-парсер c поддержкой кавычек/запятых */

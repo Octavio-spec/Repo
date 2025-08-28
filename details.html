@@ -221,8 +221,8 @@
             if (et.includes('3g')) return 35000; // 35s
             return 20000; // 20s
         }
-        async function fetchSheetCSVRace(tabKey, sheetId, gid) {
-            const mirrorUrl = `/data/${tabKey}.csv`;
+        async function fetchSheetCSVRace(tab, sheetId, gid) {
+            const mirrorUrl = `/data/${tab}.csv`;
             const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
             const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
 
@@ -335,7 +335,7 @@
             const gid = GIDS[tab] || GIDS.lathe;
             if (!id) { throw new Error('Модель не указана (id)'); }
 
-            const csv = await fetchSheetCSVRace(tabKey, SPREADSHEET_ID, tab.gid);
+            const csv = await fetchSheetCSVRace(tab, SPREADSHEET_ID, tab.gid);
             const matrix = parseCSV(csv);
             const col = findColumnByModel(matrix, id);
             if (col === -1) { throw new Error('Модель не найдена по id: ' + id); }

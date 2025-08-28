@@ -838,20 +838,6 @@
       document.getElementById('results').innerHTML = renderTableMilling(matches);
       wireModelLinks();
 
-      function wireModelLinks() {
-        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-        document.querySelectorAll('#results a.model-link').forEach(a => {
-          const id = a.getAttribute('data-id');
-          if (!id) return;
-          const url = `details.html?id=${encodeURIComponent(id)}&tab=${encodeURIComponent(activeTab)}`;
-          a.setAttribute('href', url);
-          if (!isMobile) {
-            a.setAttribute('target', '_blank');
-            a.setAttribute('rel', 'noopener');
-          }
-        });
-      }
     }
 
     /* ===== Клики по строкам (делегирование) ===== */
@@ -872,8 +858,7 @@
 
     /* ===== Инициализация ===== */
     window.addEventListener('DOMContentLoaded', () => {
-      setupRowClickDelegation();
-
+      
       // вкладки
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', async () => {

@@ -3,268 +3,319 @@
 
 <head>
     <meta charset="UTF-8" />
-    <title>Карточка оборудования</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Характеристики станка</title>
+
+    <!-- Сетевые подсказки -->
+    <link rel="preconnect" href="https://docs.google.com" crossorigin>
+    <link rel="dns-prefetch" href="https://docs.google.com">
+
     <style>
+        :root {
+            --card: #fff;
+            --muted: #6b7280;
+            --border: #e5e7eb;
+            --bg: #f7f7f9;
+        }
+
         body {
             font-family: Arial, sans-serif;
-            padding: 16px;
-            max-width: 900px;
+            margin: 0;
+            background: var(--bg);
+            color: #111827;
+        }
+
+        .wrap {
+            max-width: 1100px;
             margin: 0 auto;
-            background: #f7f7f9;
+            padding: 16px;
         }
 
-        h2 {
-            margin: 0 0 .75em 0;
-        }
-
-        .card {
-            background: #fff;
-            border: 1px solid #e5e7eb;
-            border-radius: 8px;
-            padding: 12px;
+        h1 {
+            margin: 0 0 .6rem;
+            font-size: 1.4rem;
         }
 
         .muted {
-            color: #6b7280;
+            color: var(--muted);
         }
 
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+        }
+
+        .grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        /* summary */
+        .summary {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 8px 12px;
+        }
+
+        .summary div:nth-child(odd) {
+            font-weight: 600;
+            color: #374151;
+        }
+
+        /* table */
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 14px;
         }
 
-        th,
-        td {
-            padding: 8px 10px;
-            border-bottom: 1px solid #f1f5f9;
+        thead th {
+            position: sticky;
+            top: 0;
+            background: #f3f4f6;
+            color: #374151;
             text-align: left;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
+            padding: 8px 10px;
+        }
+
+        tbody td {
+            border-bottom: 1px solid #f1f5f9;
+            padding: 8px 10px;
             vertical-align: top;
         }
 
-        thead th {
-            background: #f3f4f6;
+        tbody tr:hover {
+            background: rgba(37, 99, 235, .06);
         }
 
-        th {
-            width: 42%;
-        }
-
-        .toolbar {
-            margin-bottom: 10px;
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-
-        .back {
-            text-decoration: none;
-            font-weight: 600;
-            color: #2563eb;
-        }
-
-        pre#error {
+        /* alerts */
+        .error {
             white-space: pre-wrap;
             background: #fff5f5;
             border: 1px solid #fbcfe8;
-            padding: .6em;
-            border-radius: 6px;
-            display: none;
-            margin-top: 10px;
             color: #9b1c1c;
+            padding: .6em;
+            border-radius: 8px;
+            display: none;
         }
 
-        .section-head th {
-            background: #f3f4f6;
+        @media (max-width: 720px) {
+            .summary {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 
 <body>
-    <div class="toolbar">
-        <a class="back" href="index.html">← Назад к поиску</a>
-        <span class="muted" id="meta"></span>
-    </div>
+    <div class="wrap">
+        <h1 id="title">Характеристики станка</h1>
 
-    <h2 id="title">Загрузка…</h2>
+        <div id="summary" class="card" style="margin-bottom:12px;"></div>
 
-    <div class="card">
-        <table id="kv"></table>
-        <pre id="error"></pre>
+        <div class="card" style="margin-bottom:12px;">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:45%">Параметр</th>
+                        <th style="width:20%">Ед. изм.</th>
+                        <th>Значение</th>
+                    </tr>
+                </thead>
+                <tbody id="detailsBody"></tbody>
+            </table>
+        </div>
+
+        <pre id="error" class="error"></pre>
     </div>
 
     <script>
         'use strict';
 
-        /* ===== Конфиги листов ===== */
-        const SPREADSHEET_ID = "1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC";
-        const GIDS = { lathe: "1008569495", milling: "361418967" };
-        const csvUrl = (gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(SPREADSHEET_ID)}&gid=${encodeURIComponent(gid)}`;
+        /* ===== Конфиг листов ===== */
+        const SPREADSHEET_ID = '1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC';
+        const GIDS = { lathe: '1008569495', milling: '361418967' };
+        const sheetCSV = (sheetId, gid) => `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
 
         /* ===== Утилиты ===== */
-        const qs = new URLSearchParams(location.search);
-        const id = (qs.get("id") ? decodeURIComponent(qs.get("id")) : "").toLowerCase().trim();
-        const tab = (qs.get("tab") || "lathe").toLowerCase();
-        const gid = GIDS[tab] || GIDS.lathe;
+        const $ = s => document.querySelector(s);
+        const safeCell = (m, r, c) => (m[r] && m[r][c] !== undefined) ? m[r][c] : '';
+        function showErr(msg) { const el = $('#error'); el.textContent = msg; el.style.display = 'block'; }
+        function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[m])); }
 
-        function esc(s) { return String(s ?? "").replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])); }
-        function clean(s) { return String(s ?? "").replace(/\u00A0/g, " ").trim(); }
-        function hasValue(v) {
-            const s = clean(v);
-            if (!s) return false;
-            if (/^[-–—]+$/.test(s)) return false;
-            if (/^(нет|n\/?a|na)$/i.test(s)) return false;
-            return true;
-        }
-
+        /* Надёжный CSV-парсер с поддержкой кавычек и запятых */
         function parseCSV(text) {
-            const rows = []; let row = [], cur = '', quoted = false;
+            const rows = []; let row = [], cur = '', q = false;
             for (let i = 0; i < text.length; i++) {
-                const ch = text[i], next = text[i + 1];
-                if (quoted) {
-                    if (ch === '"' && next === '"') { cur += '"'; i++; }
-                    else if (ch === '"') { quoted = false; }
+                const ch = text[i], n = text[i + 1];
+                if (q) {
+                    if (ch === '"' && n === '"') { cur += '"'; i++; }
+                    else if (ch === '"') { q = false; }
                     else { cur += ch; }
                 } else {
-                    if (ch === '"') quoted = true;
+                    if (ch === '"') q = true;
                     else if (ch === ',') { row.push(cur); cur = ''; }
                     else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
-                    else if (ch === '\r') { }
+                    else if (ch === '\r') { /* skip */ }
                     else { cur += ch; }
                 }
             }
             if (cur.length || row.length) { row.push(cur); rows.push(row); }
-            return rows;
+            return rows.filter(r => r.length && !(r.length === 1 && r[0] === ''));
         }
 
-        function pickLabelUnit(row) {
-            const A = clean(row?.[0]);
-            const B = clean(row?.[1]);
-            const C = clean(row?.[2]);
-            if (!A && B) return { label: B, unit: C };
-            return { label: A, unit: B };
-        }
-
-        function buildRows(matrix, col) {
-            let last = matrix.length - 1;
-            while (last >= 0) {
-                const { label, unit } = pickLabelUnit(matrix[last]);
-                const v = clean(matrix[last]?.[col]);
-                if (label || unit || v) break;
-                last--;
+        /* ===== Быстрая загрузка CSV: кэш + параллельная гонка ===== */
+        function showStaleNotice(msg = 'Показаны данные из кэша — сеть недоступна.') {
+            const id = 'staleNotice';
+            let el = document.getElementById(id);
+            if (!el) {
+                el = document.createElement('div'); el.id = id;
+                el.style.cssText = 'margin:8px 0;padding:8px 10px;border:1px dashed #f59e0b;background:#fffaf0;color:#92400e;border-radius:6px;';
+                const title = $('#title') || document.body; title.parentNode.insertBefore(el, title.nextSibling);
             }
-
-            const top = [];
-            const rest = [];
-            const HEAD_TOKENS = new Set(["параметр", "значение", "ед. изм.", "ед.изм.", "ед изм", "единицы измерения"]);
-
-            for (let i = 0; i <= Math.min(2, last); i++) {
-                const { label } = pickLabelUnit(matrix[i]);
-                const value = clean(matrix[i]?.[col]);
-                if (!value) continue;
-                top.push({ label, value });
-            }
-
-            for (let i = 3; i <= last; i++) {
-                const { label, unit } = pickLabelUnit(matrix[i]);
-                const value = clean(matrix[i]?.[col]);
-                if (!value) continue;
-                const l = label.toLowerCase(), u = (unit || "").toLowerCase(), v = value.toLowerCase();
-                if (HEAD_TOKENS.has(l) || HEAD_TOKENS.has(u) || HEAD_TOKENS.has(v)) continue;
-                rest.push({ label, unit, value });
-            }
-            return { top, rest };
+            el.textContent = msg;
         }
 
-        function fail(msg) {
-            const box = document.getElementById("error");
-            box.textContent = msg;
-            box.style.display = "block";
-            document.getElementById("title").textContent = "Ошибка";
+        const CACHE_TTL_MS = 5 * 60 * 1000;
+        function pickTimeoutMs() {
+            const et = (navigator.connection && navigator.connection.effectiveType) || '';
+            if (et.includes('2g')) return 60000; // 60s
+            if (et.includes('3g')) return 35000; // 35s
+            return 20000; // 20s
         }
+        async function fetchSheetCSVCached(sheetId, gid) {
+            const key = `sheet:${sheetId}:${gid}`; const now = Date.now();
+            let cached = null; try { cached = JSON.parse(localStorage.getItem(key) || 'null'); } catch { }
+            if (cached && (now - cached.ts) < CACHE_TTL_MS && cached.csv) { return cached.csv; }
 
-        async function main() {
-            if (!id) { fail("Не передан параметр id."); return; }
+            const proxyUrl = sheetCSV(sheetId, gid);
+            const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
+            const timeoutMs = pickTimeoutMs();
+            function fetchWithTimeout(url, cacheMode = 'default') {
+                const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), timeoutMs);
+                return fetch(url, { cache: cacheMode, signal: ctrl.signal }).finally(() => clearTimeout(t));
+            }
+            async function tryText(url, cacheMode) { const r = await fetchWithTimeout(url, cacheMode); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.text(); }
 
-            let matrix;
+            const racers = [
+                tryText(proxyUrl, 'default'),
+                new Promise((res, rej) => setTimeout(() => tryText(proxyUrl, 'reload').then(res, rej), 800)),
+                new Promise((res, rej) => setTimeout(() => tryText(directUrl, 'default').then(res, rej), 1200)),
+            ];
+
             try {
-                const resp = await fetch(csvUrl(gid));
-                if (!resp.ok) throw new Error(`CSV HTTP ${resp.status}`);
-                const text = await resp.text();
-                matrix = parseCSV(text);
-            } catch (e) {
-                fail("Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + (e && e.message ? e.message : e));
-                return;
+                const csv = await Promise.any(racers);
+                try { localStorage.setItem(key, JSON.stringify({ ts: now, csv })); } catch { }
+                return csv;
+            } catch (aggregate) {
+                if (cached && cached.csv) { showStaleNotice('Показаны данные из кэша: сеть нестабильна/медленная.'); return cached.csv; }
+                const errs = (aggregate && aggregate.errors) ? aggregate.errors : [aggregate];
+                throw new Error('Не удалось получить CSV: ' + errs.map(e => e?.message || String(e)).join('; '));
             }
-
-            if (!matrix.length) { fail("Таблица пуста."); return; }
-
-                        // === найти колонку по id (сначала по строке 3 с моделями, затем fallback по строке 1) ===
-            function norm(s) { return String(s ?? "").toLowerCase().replace(/\s+/g, " ").trim(); }
-
-            const idNorm = norm(id);
-            const cols = matrix[0].length;
-            let col = -1;
-
-            // 1) модель (строка 3 по таблице -> index 2)
-            for (let j = 3; j < cols; j++) {
-                const cell = norm(matrix[2]?.[j]);
-                if (cell && cell === idNorm) { col = j; break; }
-            }
-
-            // 2) fallback: заголовок колонки (строка 1 по таблице -> index 0)
-            if (col === -1) {
-                for (let j = 3; j < cols; j++) {
-                    const cell = norm(matrix[0]?.[j]);
-                    if (cell && cell === idNorm) { col = j; break; }
-                }
-            }
-
-            if (col === -1) { fail("Модель не найдена по id: " + id); return; }
-
-
-            const brand = clean(matrix[1]?.[col]);
-            const name = clean(matrix[2]?.[col]) || clean(matrix[0]?.[col]);
-            document.getElementById("title").textContent = (brand || name) ? `${brand} ${name}`.trim() : "Карточка оборудования";
-            document.getElementById("meta").textContent = tab === "milling" ? "Фрезерные" : "Токарные";
-
-            const { top, rest } = buildRows(matrix, col);
-
-            let html = "<tbody>";
-            for (const row of top) {
-                html += `
-      <tr>
-        <th>${esc(row.label)}</th>
-        <td colspan="2"><strong>${esc(row.value)}</strong></td>
-      </tr>`;
-            }
-            if (rest.length) {
-                html += `
-      <tr class="section-head">
-        <th><strong>Параметр</strong></th>
-        <th><strong>Ед. изм.</strong></th>
-        <th><strong>Значение</strong></th>
-      </tr>`;
-            }
-            for (const row of rest) {
-                html += `
-      <tr>
-        <th>${esc(row.label)}</th>
-        <td>${esc(row.unit)}</td>
-        <td><strong>${esc(row.value)}</strong></td>
-      </tr>`;
-            }
-            if (top.length === 0 && rest.length === 0) {
-                html += `<tr><td colspan="3" class="muted">Нет данных</td></tr>`;
-            }
-            html += "</tbody>";
-
-            document.getElementById("kv").innerHTML = html;
         }
 
-        main().catch(err => {
-            fail("Неожиданная ошибка: " + (err && err.message ? err.message : String(err)));
+        /* ===== Поиск нужной колонки по id модели ===== */
+        function sanitizeId(s) { return String(s || '').toLowerCase().trim().replace(/\s+/g, ' '); }
+        function findColumnByModel(matrix, wantId) {
+            const target = sanitizeId(wantId);
+            const cols = matrix[0]?.length || 0; if (!cols) return -1;
+            // точное совпадение по строке модели (row index 2)
+            for (let j = 3; j < cols; j++) {
+                const name = sanitizeId(safeCell(matrix, 2, j));
+                if (name && name === target) return j;
+            }
+            // более мягкий поиск (без пробелов/дефисов)
+            const soft = target.replace(/[\s\-\u00A0]/g, '');
+            for (let j = 3; j < cols; j++) {
+                const name = sanitizeId(safeCell(matrix, 2, j)).replace(/[\s\-\u00A0]/g, '');
+                if (name && name === soft) return j;
+            }
+            return -1;
+        }
+
+        /* ===== Рендер ===== */
+        function renderSummary(matrix, col) {
+            const type = String(safeCell(matrix, 0, col)).trim();
+            const brand = String(safeCell(matrix, 1, col)).trim();
+            const model = String(safeCell(matrix, 2, col)).trim();
+
+            $('#title').textContent = model ? `Модель ${model}` : 'Характеристики станка';
+            $('#summary').innerHTML = `
+    <div class="summary">
+      <div>Тип станка</div><div>${esc(type) || '<span class="muted">—</span>'}</div>
+      <div>Производитель</div><div>${esc(brand) || '<span class="muted">—</span>'}</div>
+      <div>Модель</div><div>${esc(model) || '<span class="muted">—</span>'}</div>
+    </div>`;
+        }
+
+        function getLastUsefulRow(m, col) {
+            for (let r = m.length - 1; r >= 3; r--) {
+                const p = String(safeCell(m, r, 1)).trim();
+                const u = String(safeCell(m, r, 2)).trim();
+                const v = String(safeCell(m, r, col)).trim();
+                if (p || u || v) return r;
+            }
+            return 3;
+        }
+
+        function isJunkHeader(label) {
+            const t = String(label || '').trim().toLowerCase();
+            return t === 'параметр' || t === 'значение' || t === 'ед. изм.' || t === 'ед.изм.';
+        }
+
+        function renderParams(matrix, col) {
+            const last = getLastUsefulRow(matrix, col);
+            let html = '';
+            for (let r = 3; r <= last; r++) {
+                const param = String(safeCell(matrix, r, 1)).trim(); // B: название параметра
+                const unit = String(safeCell(matrix, r, 2)).trim(); // C: ед. изм. (если есть)
+                const val = String(safeCell(matrix, r, col)).trim(); // значение для выбранной модели
+
+                // пропускаем пустые и «служебные» строки
+                if (!param && !val) continue;
+                if (isJunkHeader(param)) continue;
+
+                const p = param ? esc(param) : '<span class="muted">—</span>';
+                const u = unit ? esc(unit) : '<span class="muted">—</span>';
+                const v = val ? esc(val) : '<span class="muted">—</span>';
+
+                html += `<tr><td>${p}</td><td>${u}</td><td>${v}</td></tr>`;
+            }
+            $('#detailsBody').innerHTML = html || `<tr><td colspan="3" class="muted">Данные отсутствуют</td></tr>`;
+        }
+
+        /* ===== Основной поток ===== */
+        async function main() {
+            const qs = new URLSearchParams(location.search);
+            const id = (qs.get('id') ? decodeURIComponent(qs.get('id')) : '').toLowerCase().trim();
+            const tab = (qs.get('tab') ? qs.get('tab') : 'lathe').toLowerCase();
+            const gid = GIDS[tab] || GIDS.lathe;
+            if (!id) { throw new Error('Модель не указана (id)'); }
+
+            const csv = await fetchSheetCSVCached(SPREADSHEET_ID, gid);
+            const matrix = parseCSV(csv);
+            const col = findColumnByModel(matrix, id);
+            if (col === -1) { throw new Error('Модель не найдена по id: ' + id); }
+
+            renderSummary(matrix, col);
+            renderParams(matrix, col);
+        }
+
+        // НЕ блокируем отрисовку страницы
+        window.addEventListener('DOMContentLoaded', () => {
+            const kick = () => main().catch(err => showErr(
+                'Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n' + (err && err.message ? err.message : String(err))
+            ));
+
+            if ('requestIdleCallback' in window) {
+                requestIdleCallback(kick, { timeout: 2000 });
+            } else {
+                setTimeout(kick, 0);
+            }
         });
     </script>
 </body>

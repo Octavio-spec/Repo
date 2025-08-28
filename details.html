@@ -134,6 +134,40 @@
     </div>
 
     <script>
+        // --- Полифилл Promise.any (совместимо со старыми мобильными браузерами) ---
+        (function () {
+            if (typeof Promise.any === "function") return;
+
+            function AggregateErrorPolyfill(errors, message) {
+                const err = new Error(message || "All promises were rejected");
+                err.name = "AggregateError";
+                err.errors = errors;
+                return err;
+            }
+
+            Promise.any = function (iterable) {
+                return new Promise((resolve, reject) => {
+                    const errors = [];
+                    let pending = 0;
+                    let hasAny = false;
+
+                    for (const p of iterable) {
+                        hasAny = true;
+                        pending++;
+                        Promise.resolve(p).then(resolve, (e) => {
+                            errors.push(e);
+                            if (--pending === 0) {
+                                reject(AggregateErrorPolyfill(errors));
+                            }
+                        });
+                    }
+                    if (!hasAny) {
+                         reject(AggregateErrorPolyfill([], "No promises were passed"));
+                    }
+                });
+            };
+        }());
+        
         'use strict';
 
         /* ===== Конфиг листов ===== */

@@ -1,13 +1,17 @@
 name: Mirror Google Sheets to /public/data
 
 on:
+  workflow_dispatch:
   schedule:
-    - cron: "*/10 * * * *"   # каждые 10 минут
-  workflow_dispatch: {}       # вручную по кнопке
+    - cron: "*/30 * * * *"   # каждые 30 минут (можешь поменять)
+
+permissions:
+  contents: write            # обязательно: право коммитить в репозиторий
 
 jobs:
   mirror:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -15,26 +19,25 @@ jobs:
       - name: Make data dir
         run: mkdir -p public/data
 
-      - name: Download CSV (lathe + milling)
-        env:
-          PUB_BASE: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub"
-          GID_LATHE: "1008569495"
-          GID_MILL:  "361418967"
+      # Ссылки на опубликованные CSV (Publish to the web), нужны ИМЕННО такие, чтобы curl видел 200, а не 307/404
+      # Подставь свои gid при необходимости
+      - name: Download CSVs (follow redirects)
         run: |
-          set -e
-          curl -fsSL --retry 5 --retry-delay 3 \
-            "$PUB_BASE?gid=$GID_LATHE&single=true&output=csv" \
-            -o public/data/lathe.csv
-          curl -fsSL --retry 5 --retry-delay 3 \
-            "$PUB_BASE?gid=$GID_MILL&single=true&output=csv" \
-            -o public/data/milling.csv
+          set -euo pipefail
 
-      - name: Commit changes (if any)
-        run: |
-          set -e
-          git config user.name  "sheet-mirror-bot"
-          git config user.email "sheet-mirror-bot@users.noreply.github.com"
-          git add public/data/*.csv
-          git diff --cached --quiet && echo "No changes" && exit 0
-          git commit -m "mirror: update data $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          git push
+          BASE="https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub"
+
+          # токарные
+          curl -fsSL -o public/data/lathe.csv   "${BASE}?gid=1008569495&single=true&output=csv"
+          # фрезерные
+          curl -fsSL -o public/data/milling.csv "${BASE}?gid=361418967&single=true&output=csv"
+
+          # простая валидация: файлы не пустые
+          test -s public/data/lathe.csv
+          test -s public/data/milling.csv
+
+      - name: Commit & push if changed
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(data): refresh mirrored CSV"
+          file_pattern: public/data/*.csv

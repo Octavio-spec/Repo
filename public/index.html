@@ -294,24 +294,41 @@
     }
 
     /* ===== Загрузка по вкладкам ===== */
-    async function loadTabData(tabKey){
+    async function loadTabData(tabKey) {
       const state = datasets[tabKey];
-      const loading = document.getElementById('loading'); loading.style.display='block';
-      try{
-        if(!state.loaded){
-          const csv = await Utils.fetchSheetCSVRace(tabKey, SHEET_ID, GIDS[tabKey]);
-          const matrix = Utils.parseCSV(csv);
-          const parsed = (tabKey === 'lathe') ? matrixToRecordsLathe(matrix) : matrixToRecordsMilling(matrix);
-          state.dataStore = parsed.res; state.headerMap = parsed.map; state.loaded = true;
+      const loading = document.getElementById('loading'); loading.style.display = 'block';
+      try {
+        if (!state.loaded) {
+          const pack = await Utils.fetchDataRace(tabKey, SHEET_ID, GIDS[tabKey]);
+          if (pack.kind === 'json') {
+            const arr = JSON.parse(pack.text);
+            state.dataStore = Array.isArray(arr) ? arr : [];
+            if (tabKey === 'lathe') {
+              const map = {};
+              for (const it of state.dataStore) {
+                const key = (it.type || '').trim();
+                (map[key] = map[key] || []).push(it);
+              }
+              state.headerMap = map;
+            } else {
+              state.headerMap = {};
+            }
+          } else {
+            const matrix = Utils.parseCSV(pack.text);
+            const parsed = (tabKey === 'lathe') ? matrixToRecordsLathe(matrix) : matrixToRecordsMilling(matrix);
+            state.dataStore = parsed.res; state.headerMap = parsed.map;
+          }
+          state.loaded = true;
         }
-        if(tabKey==='lathe') fillSelectLathe(state.headerMap);
-        else fillSelectMilling(state.dataStore);
+        if (tabKey === 'lathe') fillSelectLathe(state.headerMap); else fillSelectMilling(state.dataStore);
         document.getElementById('results').innerHTML = '';
-      } catch(e){
-        const errId = (tabKey==='lathe') ? 'error' : 'error-m';
-        const b = document.getElementById(errId); b.textContent = "Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n" + (e?.message||String(e)); b.style.display='block';
+      } catch (e) {
+        const errId = (tabKey === 'lathe') ? 'error' : 'error-m';
+        const b = document.getElementById(errId);
+        b.textContent = "Не удалось загрузить данные.\n" + (e?.message || e);
+        b.style.display = 'block';
       } finally {
-        loading.style.display='none';
+        loading.style.display = 'none';
       }
     }
 
@@ -385,11 +402,13 @@
     }
 
     // Открытие карточки
-    function openDetails(rawId){
-      if(!rawId) return;
+    function openDetails(rawId) {
+      if (!rawId) return;
       const url = `details.html?id=${encodeURIComponent(rawId)}&tab=${encodeURIComponent(activeTab)}`;
-      const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-      if(isMobile) window.location.href = url; else window.open(url, "_blank", "noopener");
+      const isTouch = matchMedia('(pointer: coarse)').matches;
+      const small = window.innerWidth <= 860;
+      const openInNew = !(isTouch || small); // телефоны/планшеты — в той же вкладке
+      if (openInNew) window.open(url, '_blank', 'noopener'); else location.assign(url);
     }
 
     /* ===== Делегирование кликов ===== */

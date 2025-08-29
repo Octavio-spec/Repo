@@ -27,7 +27,7 @@
     @media (max-width:720px){.summary{grid-template-columns:1fr;}}
   </style>
   <!-- Общие утилиты -->
-  <script src="js/utils.js?v=2"></script>
+  <script src="js/utils.js?v=4"></script>
 </head>
 <body>
   <div class="wrap">
@@ -135,7 +135,6 @@
       const tab = (qs.get('tab') ? qs.get('tab') : 'lathe').toLowerCase();
       const gid = GIDS[tab] || GIDS.lathe;
       if (!id) { throw new Error('Модель не указана (id)'); }
-
       const pack = await Utils.fetchDataRace(tab, SHEET_ID, gid);
       if (pack.kind === 'json') {
         const arr = JSON.parse(pack.text);

@@ -131,17 +131,24 @@
 
     async function main() {
       const qs = new URLSearchParams(location.search);
-      const id  = (qs.get('id')  ? decodeURIComponent(qs.get('id'))  : '').toLowerCase().trim();
+      const id = (qs.get('id') ? decodeURIComponent(qs.get('id')) : '').toLowerCase().trim();
       const tab = (qs.get('tab') ? qs.get('tab') : 'lathe').toLowerCase();
       const gid = GIDS[tab] || GIDS.lathe;
       if (!id) { throw new Error('Модель не указана (id)'); }
 
-      const csv = await Utils.fetchSheetCSVRace(tab, SHEET_ID, gid);
-      const matrix = Utils.parseCSV(csv);
-      const col = findColumnByModel(matrix, id);
-      if (col === -1) { throw new Error('Модель не найдена по id: ' + id); }
-      renderSummary(matrix, col);
-      renderParams(matrix, col);
+      const pack = await Utils.fetchDataRace(tab, SHEET_ID, gid);
+      if (pack.kind === 'json') {
+        const arr = JSON.parse(pack.text);
+        const rec = arr.find(it => it.id === id);
+        if (!rec) throw new Error('Модель не найдена: ' + id);
+        renderFromJson(rec);
+      } else {
+        const matrix = Utils.parseCSV(pack.text);
+        const col = findColumnByModel(matrix, id);
+        if (col === -1) throw new Error('Модель не найдена по id: ' + id);
+        renderSummary(matrix, col);
+        renderParams(matrix, col);
+      }
     }
 
     window.addEventListener('DOMContentLoaded', () => {

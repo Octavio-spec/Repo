@@ -5,6 +5,7 @@ window.AppCfg = {
   PUBLISH_BASE: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub',
   USE_PROXY: false,
   ALLOW_GOOGLE: false,      // ⟵ Google отключён для ускорения
+  USE_JSON: false,          // ⟵ временно отключаем JSON-гонку, чтобы не было 404, включишь когда загрузишь *.json
   CACHE_MINUTES: 10
 };
 
@@ -37,7 +38,6 @@ async function fetchDataRace(tabKey, sheetId, gid) {
     csv: new URL(`/data/${tabKey}.csv`, location.origin).href,
   };
 
-  // короткий кэш
   const ck = `data:${tabKey}`;
   const freshMs = Math.max(1, (AppCfg.CACHE_MINUTES || 0)) * 60 * 1000;
   try {
@@ -45,11 +45,14 @@ async function fetchDataRace(tabKey, sheetId, gid) {
     if (cached && (Date.now() - cached.t) < freshMs) return cached;
   } catch { }
 
-  const racers = [
-    _fetchWithTimeout(urls.jsonMin, ms).then(t => ({ kind: 'json', text: t })),
-    _sleep(80).then(() => _fetchWithTimeout(urls.json, ms)).then(t => ({ kind: 'json', text: t })),
-    _sleep(160).then(() => _fetchWithTimeout(urls.csv, ms)).then(t => ({ kind: 'csv', text: t })),
-  ];
+  const racers = [];
+  if (AppCfg.USE_JSON) {
+    racers.push(_fetchWithTimeout(urls.jsonMin, ms).then(t => ({ kind: 'json', text: t })));
+    racers.push(_sleep(80).then(() => _fetchWithTimeout(urls.json, ms)).then(t => ({ kind: 'json', text: t })));
+    racers.push(_sleep(160).then(() => _fetchWithTimeout(urls.csv, ms)).then(t => ({ kind: 'csv', text: t })));
+  } else {
+    racers.push(_fetchWithTimeout(urls.csv, ms).then(t => ({ kind: 'csv', text: t })));
+  }
 
   if (AppCfg.ALLOW_GOOGLE) {
     const published = `${AppCfg.PUBLISH_BASE}?gid=${encodeURIComponent(gid)}&single=true&output=csv`;

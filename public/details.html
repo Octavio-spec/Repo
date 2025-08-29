@@ -1,384 +1,156 @@
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Характеристики станка</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Характеристики станка</title>
 
-    <!-- Сетевые подсказки -->
-    <link rel="preconnect" href="https://docs.google.com" crossorigin>
-    <link rel="dns-prefetch" href="https://docs.google.com">
+  <!-- Сетевые подсказки -->
+  <link rel="preconnect" href="https://docs.google.com" crossorigin>
+  <link rel="dns-prefetch" href="https://docs.google.com">
 
-    <style>
-        :root {
-            --card: #fff;
-            --muted: #6b7280;
-            --border: #e5e7eb;
-            --bg: #f7f7f9;
-        }
-
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            background: var(--bg);
-            color: #111827;
-        }
-
-        .wrap {
-            max-width: 1100px;
-            margin: 0 auto;
-            padding: 16px;
-        }
-
-        h1 {
-            margin: 0 0 .6rem;
-            font-size: 1.4rem;
-        }
-
-        .muted {
-            color: var(--muted);
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 12px;
-        }
-
-        .grid {
-            display: grid;
-            gap: 14px;
-        }
-
-        /* summary */
-        .summary {
-            display: grid;
-            grid-template-columns: 1fr 2fr;
-            gap: 8px 12px;
-        }
-
-        .summary div:nth-child(odd) {
-            font-weight: 600;
-            color: #374151;
-        }
-
-        /* table */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 14px;
-        }
-
-        thead th {
-            position: sticky;
-            top: 0;
-            background: #f3f4f6;
-            color: #374151;
-            text-align: left;
-            font-weight: 700;
-            border-bottom: 1px solid var(--border);
-            padding: 8px 10px;
-        }
-
-        tbody td {
-            border-bottom: 1px solid #f1f5f9;
-            padding: 8px 10px;
-            vertical-align: top;
-        }
-
-        tbody tr:hover {
-            background: rgba(37, 99, 235, .06);
-        }
-
-        /* alerts */
-        .error {
-            white-space: pre-wrap;
-            background: #fff5f5;
-            border: 1px solid #fbcfe8;
-            color: #9b1c1c;
-            padding: .6em;
-            border-radius: 8px;
-            display: none;
-        }
-
-        @media (max-width: 720px) {
-            .summary {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
+  <style>
+    :root { --card:#fff; --muted:#6b7280; --border:#e5e7eb; --bg:#f7f7f9; }
+    body{font-family:Arial,sans-serif;margin:0;background:var(--bg);color:#111827;}
+    .wrap{max-width:1100px;margin:0 auto;padding:16px;}
+    h1{margin:0 0 .6rem;font-size:1.4rem;}
+    .muted{color:var(--muted);}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px;}
+    .grid{display:grid;gap:14px;}
+    .summary{display:grid;grid-template-columns:1fr 2fr;gap:8px 12px;}
+    .summary div:nth-child(odd){font-weight:600;color:#374151;}
+    table{width:100%;border-collapse:collapse;font-size:14px;}
+    thead th{position:sticky;top:0;background:#f3f4f6;color:#374151;text-align:left;font-weight:700;border-bottom:1px solid var(--border);padding:8px 10px;}
+    tbody td{border-bottom:1px solid #f1f5f9;padding:8px 10px;vertical-align:top;}
+    tbody tr:hover{background:rgba(37,99,235,.06);}
+    .error{white-space:pre-wrap;background:#fff5f5;border:1px solid #fbcfe8;color:#9b1c1c;padding:.6em;border-radius:8px;display:none;}
+    @media (max-width:720px){.summary{grid-template-columns:1fr;}}
+  </style>
+  <!-- Общие утилиты -->
+  <script src="js/utils.js"></script>
 </head>
-
 <body>
-    <div class="wrap">
-        <h1 id="title">Характеристики станка</h1>
-
-        <div id="summary" class="card" style="margin-bottom:12px;"></div>
-
-        <div class="card" style="margin-bottom:12px;">
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:45%">Параметр</th>
-                        <th style="width:20%">Ед. изм.</th>
-                        <th>Значение</th>
-                    </tr>
-                </thead>
-                <tbody id="detailsBody"></tbody>
-            </table>
-        </div>
-
-        <pre id="error" class="error"></pre>
+  <div class="wrap">
+    <h1 id="title">Характеристики станка</h1>
+    <div id="summary" class="card" style="margin-bottom:12px;"></div>
+    <div class="card" style="margin-bottom:12px;">
+      <table>
+        <thead><tr><th style="width:45%">Параметр</th><th style="width:20%">Ед. изм.</th><th>Значение</th></tr></thead>
+        <tbody id="detailsBody"></tbody>
+      </table>
     </div>
+    <pre id="error" class="error"></pre>
+  </div>
 
-    <script>
-
-        // --- Полифилл Promise.any (совместимо со старыми мобильными браузерами) ---
-        (function () {
-            if (typeof Promise.any === "function") return;
-
-            function AggregateErrorPolyfill(errors, message) {
-                const err = new Error(message || "All promises were rejected");
-                err.name = "AggregateError";
-                err.errors = errors;
-                return err;
-            }
-
-            Promise.any = function (iterable) {
-                return new Promise((resolve, reject) => {
-                    const errors = [];
-                    let pending = 0;
-                    let hasAny = false;
-
-                    for (const p of iterable) {
-                        hasAny = true;
-                        pending++;
-                        Promise.resolve(p).then(resolve, (e) => {
-                            errors.push(e);
-                            if (--pending === 0) {
-                                reject(AggregateErrorPolyfill(errors));
-                            }
-                        });
-                    }
-                    if (!hasAny) {
-                         reject(AggregateErrorPolyfill([], "No promises were passed"));
-                    }
-                });
-            };
-        }());
-        
-        'use strict';
-
-        /* ===== Конфиг листов ===== */
-        const SPREADSHEET_ID = '1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC';
-        const GIDS = { lathe: '1008569495', milling: '361418967' };
-
-        /* ===== Утилиты ===== */
-        const $ = s => document.querySelector(s);
-        const safeCell = (m, r, c) => (m[r] && m[r][c] !== undefined) ? m[r][c] : '';
-        function showErr(msg) { const el = $('#error'); el.textContent = msg; el.style.display = 'block'; }
-        function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', '\'': '&#39;' }[m])); }
-
-        /* Надёжный CSV-парсер с поддержкой кавычек и запятых */
-        function parseCSV(text) {
-            const rows = []; let row = [], cur = '', q = false;
-            for (let i = 0; i < text.length; i++) {
-                const ch = text[i], n = text[i + 1];
-                if (q) {
-                    if (ch === '"' && n === '"') { cur += '"'; i++; }
-                    else if (ch === '"') { q = false; }
-                    else { cur += ch; }
-                } else {
-                    if (ch === '"') q = true;
-                    else if (ch === ',') { row.push(cur); cur = ''; }
-                    else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
-                    else if (ch === '\r') { /* skip */ }
-                    else { cur += ch; }
-                }
-            }
-            if (cur.length || row.length) { row.push(cur); rows.push(row); }
-            return rows.filter(r => r.length && !(r.length === 1 && r[0] === ''));
-        }
-
-        /* ===== Быстрая загрузка CSV: кэш + параллельная гонка ===== */
-        function showStaleNotice(msg = 'Показаны данные из кэша — сеть недоступна.') {
-            const id = 'staleNotice';
-            let el = document.getElementById(id);
-            if (!el) {
-                el = document.createElement('div'); el.id = id;
-                el.style.cssText = 'margin:8px 0;padding:8px 10px;border:1px dashed #f59e0b;background:#fffaf0;color:#92400e;border-radius:6px;';
-                const title = $('#title') || document.body; title.parentNode.insertBefore(el, title.nextSibling);
-            }
-            el.textContent = msg;
-        }
-
-        const CACHE_TTL_MS = 5 * 60 * 1000;
-
-        let ctrls = [];
-
-        function pickTimeoutMs() {
-            const et = (navigator.connection && navigator.connection.effectiveType) || '';
-            if (et.includes('2g')) return 60000;
-            if (et.includes('3g')) return 35000;
-            return 20000;
-        }
-
-        function fetchWithTimeout(url, timeoutMs, cacheMode = 'default') {
-            const ctrl = new AbortController();
-            ctrls.push(ctrl);
-            const t = setTimeout(() => ctrl.abort(), timeoutMs);
-
-            return fetch(url, { cache: cacheMode, signal: ctrl.signal })
-                .then(async r => {
-                    clearTimeout(t);
-                    if (!r.ok) throw new Error(`${url} -> HTTP ${r.status}`);
-                    if (r.status === 404) throw new Error(`${url} -> 404`);
-                    return r.text();
-                });
-        }
-
-        function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        async function fetchSheetCSVRace(tabKey, sheetId, gid) {
-            const timeoutMs = pickTimeoutMs();
-
-            const mirrorUrl = `/data/${tabKey}.csv`;
-            const proxyUrl = `/api/sheet?format=csv&sheetId=${encodeURIComponent(sheetId)}&gid=${encodeURIComponent(gid)}`;
-            const publishedUrl = `https://docs.google.com/spreadsheets/d/e/2PACX-1vSSoiSE1ZmtEo4JQOEIHiJWWTjiG_cV1s7rtcjuUYmbafvuDV1k1_53Q6p-L0f8Qg/pub?gid=${encodeURIComponent(gid)}&single=true&output=csv`;
-            const directUrl = `https://docs.google.com/spreadsheets/d/${encodeURIComponent(sheetId)}/export?format=csv&gid=${encodeURIComponent(gid)}`;
-
-            const racers = [
-                fetchWithTimeout(mirrorUrl, timeoutMs, 'default'),
-                sleep(200).then(() => fetchWithTimeout(proxyUrl, timeoutMs, 'default')),
-                sleep(500).then(() => fetchWithTimeout(publishedUrl, timeoutMs, 'default')),
-                sleep(900).then(() => fetchWithTimeout(directUrl, timeoutMs, 'default')),
-            ];
-
-            try {
-                const csv = await Promise.any(racers);
-                return csv;
-            } catch (agg) {
-                const errs = (agg && agg.errors) ? agg.errors : [agg];
-                throw new Error('All sources failed: ' + errs.map(e => e?.message || String(e)).join('; '));
-            } finally {
-                // отменяем оставшиеся запросы и СБРАСЫВАЕМ массив, чтобы он был готов к следующему вызову
-                try { ctrls.forEach(c => { try { c.abort(); } catch { } }); } finally { ctrls = []; }
-            }
-        }
-
-        /* ===== Поиск нужной колонки по id модели ===== */
-        function sanitizeId(s) { return String(s || '').toLowerCase().trim().replace(/\s+/g, ' '); }
-        function findColumnByModel(matrix, wantId) {
-            const target = sanitizeId(wantId);
-            const cols = matrix[0]?.length || 0; if (!cols) return -1;
-            // точное совпадение по строке модели (row index 2)
-            for (let j = 3; j < cols; j++) {
-                const name = sanitizeId(safeCell(matrix, 2, j));
-                if (name && name === target) return j;
-            }
-            // более мягкий поиск (без пробелов/дефисов)
-            const soft = target.replace(/[\s\-\u00A0]/g, '');
-            for (let j = 3; j < cols; j++) {
-                const name = sanitizeId(safeCell(matrix, 2, j)).replace(/[\s\-\u00A0]/g, '');
-                if (name && name === soft) return j;
-            }
-            return -1;
-        }
-
-        /* ===== Рендер ===== */
-        function renderSummary(matrix, col) {
-            const type = String(safeCell(matrix, 0, col)).trim();
-            const brand = String(safeCell(matrix, 1, col)).trim();
-            const model = String(safeCell(matrix, 2, col)).trim();
-
-            $('#title').textContent = model ? `Модель ${model}` : 'Характеристики станка';
-            $('#summary').innerHTML = `
-    <div class="summary">
-      <div>Тип станка</div><div>${esc(type) || '<span class="muted">—</span>'}</div>
-      <div>Производитель</div><div>${esc(brand) || '<span class="muted">—</span>'}</div>
-      <div>Модель</div><div>${esc(model) || '<span class="muted">—</span>'}</div>
-    </div>`;
-        }
-
-        function getLastUsefulRow(m, col) {
-            for (let r = m.length - 1; r >= 3; r--) {
-                const p = String(safeCell(m, r, 1)).trim();
-                const u = String(safeCell(m, r, 2)).trim();
-                const v = String(safeCell(m, r, col)).trim();
-                if (p || u || v) return r;
-            }
-            return 3;
-        }
-
-        function isJunkHeader(label) {
-            const t = String(label || '').trim().toLowerCase();
-            return t === 'параметр' || t === 'значение' || t === 'ед. изм.' || t === 'ед.изм.';
-        }
-
-        function hasValue(v) {
-            const s = String(v ?? '').replace(/\u00A0/g, ' ').trim();
-            if (!s) return false;                 // пусто
-            if (/^[-–—]+$/.test(s)) return false; // одни тире
-            if (/^(нет|n\/?a|na)$/i.test(s)) return false; // “нет/NA”
-            return true;
-        }
-
-       function renderParams(matrix, col) {
-            const last = getLastUsefulRow(matrix, col);
-            let html = '';
-            for (let r = 3; r <= last; r++) {
-                const param = String(safeCell(matrix, r, 1)).trim(); // B
-                const unit = String(safeCell(matrix, r, 2)).trim(); // C
-                const val = String(safeCell(matrix, r, col)).trim(); // значение
-
-                // пропускаем “шапки” и пустые/псевдопустые значения
-                if (isJunkHeader(param) || isJunkHeader(unit) || isJunkHeader(val)) continue;
-                if (!hasValue(val)) continue; // <<< ключевая строка — не выводим пустые значения
-
-                const p = hasValue(param) ? esc(param) : '<span class="muted">—</span>';
-                const u = hasValue(unit) ? esc(unit) : '<span class="muted">—</span>';
-                const v = esc(val);
-
-                html += `<tr><td>${p}</td><td>${u}</td><td>${v}</td></tr>`;
-            }
-            $('#detailsBody').innerHTML =
-                html || `<tr><td colspan="3" class="muted">Данные отсутствуют</td></tr>`;
-        }
-
-        /* ===== Основной поток ===== */
-        async function main() {
-            const qs = new URLSearchParams(location.search);
-            const id = (qs.get('id') ? decodeURIComponent(qs.get('id')) : '').toLowerCase().trim();
-            const tab = (qs.get('tab') ? qs.get('tab') : 'lathe').toLowerCase();
-            const gid = GIDS[tab] || GIDS.lathe;
-            if (!id) { throw new Error('Модель не указана (id)'); }
-
-            const csv = await fetchSheetCSVRace(tab, SPREADSHEET_ID, gid);
-                        const matrix = parseCSV(csv);
-            const col = findColumnByModel(matrix, id);
-            if (col === -1) { throw new Error('Модель не найдена по id: ' + id); }
-
-            renderSummary(matrix, col);
-            renderParams(matrix, col);
-        }
-
-        // НЕ блокируем отрисовку страницы
-        window.addEventListener('DOMContentLoaded', () => {
-            const kick = () => main().catch(err => showErr(
-                'Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n' + (err && err.message ? err.message : String(err))
-            ));
-
-            if ('requestIdleCallback' in window) {
-                requestIdleCallback(kick, { timeout: 2000 });
-            } else {
-                setTimeout(kick, 0);
-            }
+  <script>
+    // --- Полифилл Promise.any (на старых мобильных) ---
+    (function () {
+      if (typeof Promise.any === "function") return;
+      function AggregateErrorPolyfill(errors, message) {
+        const err = new Error(message || "All promises were rejected");
+        err.name = "AggregateError"; err.errors = errors; return err;
+      }
+      Promise.any = function (iterable) {
+        return new Promise((resolve, reject) => {
+          const errors = []; let pending = 0; let hasAny = false;
+          for (const p of iterable) {
+            hasAny = true; pending++;
+            Promise.resolve(p).then(resolve, (e) => {
+              errors.push(e); if (--pending === 0) reject(AggregateErrorPolyfill(errors));
+            });
+          }
+          if (!hasAny) reject(AggregateErrorPolyfill([], "No promises were passed"));
         });
-    </script>
-</body>
+      };
+    }());
+    'use strict';
 
+    // Конфиг из AppCfg / утилиты
+    const { SHEET_ID, GIDS } = window.AppCfg;
+
+    function showErr(msg){ const el = document.getElementById('error'); el.textContent = msg; el.style.display='block'; }
+
+    // ===== Поиск нужной колонки по id модели =====
+    function findColumnByModel(matrix, wantId) {
+      const target = Utils.sanitizeId(wantId);
+      const cols = matrix[0]?.length || 0; if (!cols) return -1;
+      for (let j = 3; j < cols; j++) {
+        const name = Utils.sanitizeId(Utils.safeCell(matrix, 2, j));
+        if (name && name === target) return j;
+      }
+      const soft = target.replace(/[\s\-\u00A0]/g, '');
+      for (let j = 3; j < cols; j++) {
+        const name = Utils.sanitizeId(Utils.safeCell(matrix, 2, j)).replace(/[\s\-\u00A0]/g, '');
+        if (name && name === soft) return j;
+      }
+      return -1;
+    }
+
+    function renderSummary(matrix, col) {
+      const type  = String(Utils.safeCell(matrix, 0, col)).trim();
+      const brand = String(Utils.safeCell(matrix, 1, col)).trim();
+      const model = String(Utils.safeCell(matrix, 2, col)).trim();
+      document.getElementById('title').textContent = model ? `Модель ${model}` : 'Характеристики станка';
+      document.getElementById('summary').innerHTML = `
+        <div class="summary">
+          <div>Тип станка</div><div>${Utils.esc(type)  || '<span class="muted">—</span>'}</div>
+          <div>Производитель</div><div>${Utils.esc(brand) || '<span class="muted">—</span>'}</div>
+          <div>Модель</div><div>${Utils.esc(model) || '<span class="muted">—</span>'}</div>
+        </div>`;
+    }
+
+    function getLastUsefulRow(m, col) {
+      for (let r = m.length - 1; r >= 3; r--) {
+        const p = String(Utils.safeCell(m, r, 1)).trim();
+        const u = String(Utils.safeCell(m, r, 2)).trim();
+        const v = String(Utils.safeCell(m, r, col)).trim();
+        if (p || u || v) return r;
+      }
+      return 3;
+    }
+    function isJunkHeader(label) {
+      const t = String(label || '').trim().toLowerCase();
+      return t === 'параметр' || t === 'значение' || t === 'ед. изм.' || t === 'ед.изм.';
+    }
+    function renderParams(matrix, col) {
+      const last = getLastUsefulRow(matrix, col);
+      let html = '';
+      for (let r = 3; r <= last; r++) {
+        const param = String(Utils.safeCell(matrix, r, 1)).trim();
+        const unit  = String(Utils.safeCell(matrix, r, 2)).trim();
+        const val   = String(Utils.safeCell(matrix, r, col)).trim();
+        if (isJunkHeader(param) || isJunkHeader(unit) || isJunkHeader(val)) continue;
+        if (!Utils.hasValue(val)) continue;
+        const p = Utils.hasValue(param) ? Utils.esc(param) : '<span class="muted">—</span>';
+        const u = Utils.hasValue(unit)  ? Utils.esc(unit)  : '<span class="muted">—</span>';
+        const v = Utils.esc(val);
+        html += `<tr><td>${p}</td><td>${u}</td><td>${v}</td></tr>`;
+      }
+      document.getElementById('detailsBody').innerHTML = html || `<tr><td colspan="3" class="muted">Данные отсутствуют</td></tr>`;
+    }
+
+    async function main() {
+      const qs = new URLSearchParams(location.search);
+      const id  = (qs.get('id')  ? decodeURIComponent(qs.get('id'))  : '').toLowerCase().trim();
+      const tab = (qs.get('tab') ? qs.get('tab') : 'lathe').toLowerCase();
+      const gid = GIDS[tab] || GIDS.lathe;
+      if (!id) { throw new Error('Модель не указана (id)'); }
+
+      const csv = await Utils.fetchSheetCSVRace(tab, SHEET_ID, gid);
+      const matrix = Utils.parseCSV(csv);
+      const col = findColumnByModel(matrix, id);
+      if (col === -1) { throw new Error('Модель не найдена по id: ' + id); }
+      renderSummary(matrix, col);
+      renderParams(matrix, col);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const kick = () => main().catch(err => showErr(
+        'Не удалось загрузить данные (CSV).\nПроверьте доступ к листу и gid.\n\n' + (err && err.message ? err.message : String(err))
+      ));
+      if ('requestIdleCallback' in window) requestIdleCallback(kick, { timeout: 2000 });
+      else setTimeout(kick, 0);
+    });
+  </script>
+</body>
 </html>

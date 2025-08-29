@@ -23,10 +23,15 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
 
-# Папка функций
+# Прокси функций: /api/* → /.netlify/functions/*
+[[redirects]]
+  from = "/api/*"
+  to   = "/.netlify/functions/:splat"
+  status = 200
+
 [functions]
   directory = "netlify/functions"
-  
+
 [build]
   publish   = "public"
   functions = "netlify/functions"

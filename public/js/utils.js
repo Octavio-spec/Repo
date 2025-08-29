@@ -1,4 +1,18 @@
 /* ===== Общие утилиты ===== */
+// Polyfill: Promise.any для старых мобильных браузеров (iOS 14-, Android WebView 80-)
+(function () {
+  if (typeof Promise !== 'undefined' && typeof Promise.any !== 'function') {
+    function AggregateErrorPolyfill(errors, message) { const e = new Error(message || 'All promises were rejected'); e.name = 'AggregateError'; e.errors = errors; return e; }
+    Promise.any = function (iterable) {
+      return new Promise(function (resolve, reject) {
+        const errors = []; let pending = 0; let hasAny = false;
+        for (const p of iterable) { hasAny = true; pending++; Promise.resolve(p).then(resolve, e => { errors.push(e); if (--pending === 0) reject(AggregateErrorPolyfill(errors)); }); }
+        if (!hasAny) reject(AggregateErrorPolyfill([], 'No promises were passed'));
+      });
+    };
+  }
+})();
+
 window.AppCfg = {
   SHEET_ID: '1uLMv39-f9U2qKzAanPEHXPRjNezLlZJC',
   GIDS: { lathe: '1008569495', milling: '361418967' },
@@ -47,11 +61,11 @@ async function fetchDataRace(tabKey, sheetId, gid) {
 
   const racers = [];
   if (AppCfg.USE_JSON) {
-    racers.push(_fetchWithTimeout(urls.jsonMin, ms).then(t => ({ kind: 'json', text: t })));
-    racers.push(_sleep(80).then(() => _fetchWithTimeout(urls.json, ms)).then(t => ({ kind: 'json', text: t })));
-    racers.push(_sleep(160).then(() => _fetchWithTimeout(urls.csv, ms)).then(t => ({ kind: 'csv', text: t })));
+    racers.push(_fetchWithTimeout(urls.jsonMin, ms, 'force-cache').then(t => ({ kind: 'json', text: t })));
+    racers.push(_sleep(80).then(() => _fetchWithTimeout(urls.json, ms, 'force-cache')).then(t => ({ kind: 'json', text: t })));
+    racers.push(_sleep(160).then(() => _fetchWithTimeout(urls.csv, ms, 'force-cache')).then(t => ({ kind: 'csv', text: t })));
   } else {
-    racers.push(_fetchWithTimeout(urls.csv, ms).then(t => ({ kind: 'csv', text: t })));
+    racers.push(_fetchWithTimeout(urls.csv, ms, 'force-cache').then(t => ({ kind: 'csv', text: t })));
   }
 
   if (AppCfg.ALLOW_GOOGLE) {

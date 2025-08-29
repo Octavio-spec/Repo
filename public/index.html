@@ -301,18 +301,8 @@
         if (!state.loaded) {
           const pack = await Utils.fetchDataRace(tabKey, SHEET_ID, GIDS[tabKey]);
           if (pack.kind === 'json') {
-            const arr = JSON.parse(pack.text);
-            state.dataStore = Array.isArray(arr) ? arr : [];
-            if (tabKey === 'lathe') {
-              const map = {};
-              for (const it of state.dataStore) {
-                const key = (it.type || '').trim();
-                (map[key] = map[key] || []).push(it);
-              }
-              state.headerMap = map;
-            } else {
-              state.headerMap = {};
-            }
+            state.dataStore = JSON.parse(pack.text);
+            state.headerMap = (tabKey === 'lathe') ? groupByType(state.dataStore) : {};
           } else {
             const matrix = Utils.parseCSV(pack.text);
             const parsed = (tabKey === 'lathe') ? matrixToRecordsLathe(matrix) : matrixToRecordsMilling(matrix);
@@ -320,13 +310,12 @@
           }
           state.loaded = true;
         }
-        if (tabKey === 'lathe') fillSelectLathe(state.headerMap); else fillSelectMilling(state.dataStore);
+        if (tabKey === 'lathe') fillSelectLathe(state.headerMap);
+        else fillSelectMilling(state.dataStore);
         document.getElementById('results').innerHTML = '';
       } catch (e) {
         const errId = (tabKey === 'lathe') ? 'error' : 'error-m';
-        const b = document.getElementById(errId);
-        b.textContent = "Не удалось загрузить данные.\n" + (e?.message || e);
-        b.style.display = 'block';
+        const b = document.getElementById(errId); b.textContent = "Не удалось загрузить данные.\n" + (e?.message || String(e)); b.style.display = 'block';
       } finally {
         loading.style.display = 'none';
       }
